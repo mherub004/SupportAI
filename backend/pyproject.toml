@@ -1,0 +1,15 @@
+[project]
+name = "supportflow-api"
+version = "0.1.0"
+description = "Knowledge-grounded, draft-first email support pilot"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "sqlalchemy>=2.0,<3", "psycopg[binary]>=3.2,<4", "httpx>=0.28,<1", "pydantic-settings>=2.8,<3", "google-auth>=2.38,<3", "requests>=2.32,<3", "pypdf>=5.3,<7"]
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+[tool.ruff]
+line-length = 110
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

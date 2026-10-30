@@ -1,0 +1,78 @@
+name: supportflow
+x-backend: &backend
+  image: supportflow-api:local
+  build: ./backend
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://supportflow:${POSTGRES_PASSWORD:?Run scripts/configure.py}@db:5432/supportflow
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+services:
+  db:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_USER: supportflow
+      POSTGRES_DB: supportflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run scripts/configure.py}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U supportflow -d supportflow']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  init:
+    <<: *backend
+    command: [python, -m, app.cli, init-db]
+    restart: "no"
+  seed:
+    <<: *backend
+    profiles: [demo]
+    command: [python, -m, app.cli, seed-demo]
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    restart: "no"
+  api:
+    <<: *backend
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    ports:
+      - 127.0.0.1:8000:8000
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health")']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  worker:
+    <<: *backend
+    command: [python, -m, app.worker]
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+        required: false
+      api:
+        condition: service_healthy
+  dashboard:
+    build: ./dashboard
+    image: supportflow-dashboard:local
+    env_file: .env
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, node, -e, 'fetch("http://127.0.0.1:3000").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+volumes:
+  database:

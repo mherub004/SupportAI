@@ -1,0 +1,41 @@
+# Managed cloud ONLY: build and runtime trust for the session proxy.
+# Run: docker compose -f compose.yaml -f compose.cloud.yaml --profile demo up --build -d
+services:
+  init:
+    build:
+      context: ./backend
+      secrets: [proxy_ca]
+    volumes: ["/etc/ssl/certs/ca-certificates.crt:/run/cloud-ca.pem:ro"]
+    environment:
+      SSL_CERT_FILE: /run/cloud-ca.pem
+      REQUESTS_CA_BUNDLE: /run/cloud-ca.pem
+  api:
+    build:
+      context: ./backend
+      secrets: [proxy_ca]
+    volumes: ["/etc/ssl/certs/ca-certificates.crt:/run/cloud-ca.pem:ro"]
+    environment:
+      SSL_CERT_FILE: /run/cloud-ca.pem
+      REQUESTS_CA_BUNDLE: /run/cloud-ca.pem
+  seed:
+    build:
+      context: ./backend
+      secrets: [proxy_ca]
+  worker:
+    build:
+      context: ./backend
+      secrets: [proxy_ca]
+    volumes: ["/etc/ssl/certs/ca-certificates.crt:/run/cloud-ca.pem:ro"]
+    environment:
+      SSL_CERT_FILE: /run/cloud-ca.pem
+      REQUESTS_CA_BUNDLE: /run/cloud-ca.pem
+  dashboard:
+    build:
+      context: ./dashboard
+      secrets: [proxy_ca]
+    volumes: ["/etc/ssl/certs/ca-certificates.crt:/run/cloud-ca.pem:ro"]
+    environment:
+      NODE_EXTRA_CA_CERTS: /run/cloud-ca.pem
+secrets:
+  proxy_ca:
+    file: /etc/ssl/certs/ca-certificates.crt

@@ -1,0 +1,107 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, create_engine
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+
+
+def now():
+    # UTC naive timestamps keep SQLite and PostgreSQL comparisons consistent.
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    paused: Mapped[bool] = mapped_column(Boolean, default=False)
+    owner: Mapped[str] = mapped_column(String(100), default="")
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    title: Mapped[str] = mapped_column(String(500))
+    revision: Mapped[str] = mapped_column(String(100))
+    checksum: Mapped[str] = mapped_column(String(64))
+    brand: Mapped[str] = mapped_column(String(40))
+    model: Mapped[str] = mapped_column(String(100))
+    language: Mapped[str] = mapped_column(String(2))
+    owner: Mapped[str] = mapped_column(String(200))
+    approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    visibility: Mapped[str] = mapped_column(String(40), default="customer_safe")
+    effective_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    content: Mapped[str] = mapped_column(Text)
+    url: Mapped[str] = mapped_column(String(1000))
+    customer_url: Mapped[str] = mapped_column(String(1000), default="")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    sender: Mapped[str] = mapped_column(String(320))
+    subject: Mapped[str] = mapped_column(Text)
+    body: Mapped[str] = mapped_column(Text)
+    headers: Mapped[dict] = mapped_column(JSON, default=dict)
+    language: Mapped[str] = mapped_column(String(2), default="en")
+    brand: Mapped[str] = mapped_column(String(40), default="unknown")
+    model: Mapped[str] = mapped_column(String(100), default="unknown")
+    category: Mapped[str] = mapped_column(String(50), default="unknown")
+    disposition: Mapped[str] = mapped_column(String(30), default="pending")
+    status: Mapped[str] = mapped_column(String(30), default="queued", index=True)
+    risk_tags: Mapped[list] = mapped_column(JSON, default=list)
+    response: Mapped[str] = mapped_column(Text, default="")
+    citations: Mapped[list] = mapped_column(JSON, default=list)
+    provider_version: Mapped[str] = mapped_column(String(100), default="")
+    draft_id: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Job(Base):
+    __tablename__ = "jobs"
+    id: Mapped[str] = mapped_column(String(300), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(30))
+    payload: Mapped[dict] = mapped_column(JSON)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime, default=now, index=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str] = mapped_column(String(100), default="")
+
+
+class Send(Base):
+    __tablename__ = "sends"
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
+    state: Mapped[str] = mapped_column(String(30), default="reserved")
+    outbound_id: Mapped[str] = mapped_column(String(255), default="")
+    rfc_message_id: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class Audit(Base):
+    __tablename__ = "audit"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event: Mapped[str] = mapped_column(String(100))
+    entity_id: Mapped[str] = mapped_column(String(300))
+    actor: Mapped[str] = mapped_column(String(100), default="system")
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
+class State(Base):
+    __tablename__ = "state"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+
+
+def database(url):
+    engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
+    return engine, sessionmaker(engine, expire_on_commit=False)
+
+
+def audit(session, event, entity_id, actor="system", **details):
+    session.add(Audit(event=event, entity_id=entity_id, actor=actor, details=details))
