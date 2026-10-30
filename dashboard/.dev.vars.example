@@ -1,0 +1,5 @@
+# Local Wrangler preview only. Copy to .dev.vars and use your local backend token.
+API_URL=http://127.0.0.1:8000
+OPERATOR_TOKEN=YOUR_LOCAL_BACKEND_OPERATOR_TOKEN
+COOKIE_SECURE=false
+DASHBOARD_ORIGIN=http://localhost:8787

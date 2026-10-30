@@ -18,3 +18,11 @@ Verified in the managed development environment against synthetic fixtures only.
 Desktop and mobile screenshots in `docs/assets/` are captures of the synthetic workspace, not designs or mockups.
 
 No live Gmail, Drive, Gemini, corporate SSO, Cloud Run deployment, backup restore, production safety/correctness benchmark, or GitHub-hosted CI run is claimed by these local results. Google adapter tests use controlled responses. Review the delivery map before connecting company data or enabling any automated replies.
+
+## Cloudflare Workers target
+
+- OpenNext 1.20.14 / Wrangler 4.156.0 bundle build: passed.
+- Existing Chromium review/approval/ownership and mobile tests against the actual local Workers runtime (`DASHBOARD_URL=http://localhost:8787`): **2 passed**.
+- Local Workers login and authenticated backend overview/inbox proxy: verified against the running synthetic backend. Local operator credential was checked absent from built JavaScript; `.dev.vars`, `.wrangler`, and `.open-next` are ignored by Git.
+- Deployment preflight correctly rejects the unset backend URL.
+- Live publication: **blocked**. Wrangler reports no authenticated Cloudflare account, and the user confirmed no hosted backend exists. No workers.dev URL or live deployment is claimed.

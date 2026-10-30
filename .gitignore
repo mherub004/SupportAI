@@ -17,3 +17,10 @@ playwright-report/
 test-results/
 
 backups/
+
+# Cloudflare local state and credentials
+.open-next/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

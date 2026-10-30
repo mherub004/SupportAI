@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "worker:build": "opennextjs-cloudflare build",
+    "worker:preview": "npm run worker:build && wrangler dev --port 8787",
+    "worker:deploy": "node scripts/worker-preflight.mjs && npm run worker:build && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "next": "^15.5.0",
@@ -15,10 +18,12 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.20.14",
     "@playwright/test": "^1.64.1",
     "@types/node": "^22.13.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "wrangler": "^4.156.0"
   }
 }

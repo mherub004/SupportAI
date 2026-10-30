@@ -38,6 +38,10 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: '1'
       - run: npm run typecheck
+      - run: npm run worker:build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          WRANGLER_SEND_METRICS: 'false'
   compose-smoke:
     runs-on: ubuntu-latest
     steps:

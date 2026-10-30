@@ -90,3 +90,7 @@ The local operator token is a pilot authentication mechanism. For organizational
 | `docs/` | Original plan, architecture decision, operating/security guides, delivery map |
 
 See [architecture](docs/ARCHITECTURE.md), [runbook](docs/RUNBOOK.md), and [delivery status](docs/DELIVERY_STATUS.md). No commercial license is granted by this repository; ownership/commercialization decisions in the plan remain with the appropriate rights holders.
+
+## Cloudflare Workers
+
+The Next.js dashboard has an OpenNext Workers deployment target. The Python API, background worker, and PostgreSQL need a separate HTTPS backend host. See [Cloudflare deployment](docs/CLOUDFLARE.md) for account authorization, secret configuration, build, and deployment steps.
