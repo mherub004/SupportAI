@@ -106,3 +106,5 @@ The Next.js dashboard has an OpenNext Workers deployment target. The Python API,
 ## Email + knowledge + CRM integrations
 
 [Follow the guided integration setup](docs/INTEGRATIONS.md). Register each OAuth app once, then connect Google, Salesforce or NetSuite through provider sign-in. Browse and approve original Drive documents used by NotebookLM. Gmail holds the generated drafts; optional CRM customer lookups are available to reviewers and never modify records or automatically disclose account facts.
+
+Before sharing, [test with two personal email accounts](docs/PERSONAL_TEST.md). The guide starts with Google Cloud's External/Testing OAuth setup, includes synthetic English/German knowledge files and a real email round trip, and lists 30 user-function checks plus optional Salesforce/NetSuite tests. Keep the test mailbox in its own installation.

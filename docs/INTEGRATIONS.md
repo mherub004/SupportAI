@@ -1,5 +1,7 @@
 # Connect business email, knowledge, Salesforce and NetSuite
 
+For a first personal-account trial, start with [the two-account test guide](PERSONAL_TEST.md): Google OAuth registration, sample knowledge, real email delivery checks and a supported-function checklist.
+
 The application keeps these roles separate:
 
 | System | Purpose | Current behavior |

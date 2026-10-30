@@ -50,3 +50,10 @@ No live Gmail, Drive, Gemini, corporate SSO, Cloud Run deployment, backup restor
 - Browser suite against the PostgreSQL-backed deployment container: **4 passed**. This includes guided Google account connection with PKCE, an HttpOnly browser binding, rejected forged callback, existing review/safety/ownership behavior, mobile layout, and persisted company/secret setup.
 - The final startup script was checked with an explicit dashboard origin differing from Render's supplied origin; the same four browser tests passed with the explicit origin taking precedence.
 - The external provider consent page is mocked in the browser test; provider REST/token contracts are mocked in backend tests. No live Google, Salesforce or NetSuite account was connected, and no real customer messages or CRM records were processed. Administrators must register/approve OAuth clients and verify their actual account permissions in the deployed app.
+
+## Personal-account testing preparation
+
+- Re-ran the unchanged integration release: **107 backend tests passed**, **4 browser tests passed**, and the combined container's database-backed health check passed.
+- PostgreSQL checks in the combined deployment container passed: eight concurrent ingests produced one message/job and eight send attempts produced one synthetic adapter call. A disposable database was used, then removed; the existing application database was preserved.
+- Added [a two-account manual test guide](PERSONAL_TEST.md), English/German synthetic source files, 30 user-function checks and optional CRM sandbox checks. These are instructions and pending acceptance checks, not fabricated live results.
+- Real Google sign-in, Gemini generation, Gmail delivery, Salesforce and NetSuite remain untested in the user's accounts. This environment's outbound destination policy does not permit the public Render/Google service hosts, and no live provider account credentials are configured here. These checks must be completed through the deployed app with the account holder's consent.

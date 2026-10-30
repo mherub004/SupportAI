@@ -1,5 +1,7 @@
 # Deploy once, configure the business later
 
+Testing before handing this to a company? Follow [the personal Gmail test guide](PERSONAL_TEST.md) in a separate test installation; it includes the one-time Google setup and a function checklist.
+
 SupportFlow can be deployed before any Google accounts, business knowledge or model keys are connected. The authenticated application opens **Business setup**. Each company uses a separate deployment, PostgreSQL database, operator token and connector credentials. This release is not a public shared multi-tenant signup service.
 
 ## Company onboarding
