@@ -6,6 +6,10 @@ A runnable, draft-first email support pilot based on the [uploaded project plan]
 
 ![Synthetic operator workspace](docs/assets/inbox.png)
 
+## Hosted demo option
+
+[Deploy on Render](https://render.com/deploy?repo=https://github.com/mherub004/SupportAI) after signing in and granting repository access. The Blueprint requests free plans and bundles the dashboard, API and worker with PostgreSQL. Review [setup and free-tier limitations](docs/RENDER.md): sleeping services are suitable for a demo, not production email automation.
+
 ## Start the synthetic demo
 
 Prerequisites: Docker Engine with Compose v2 (supports optional dependencies), Python 3.12+ for the configuration helper.

@@ -26,3 +26,11 @@ No live Gmail, Drive, Gemini, corporate SSO, Cloud Run deployment, backup restor
 - Local Workers login and authenticated backend overview/inbox proxy: verified against the running synthetic backend. Local operator credential was checked absent from built JavaScript; `.dev.vars`, `.wrangler`, and `.open-next` are ignored by Git.
 - Deployment preflight correctly rejects the unset backend URL.
 - Live publication: **blocked**. Wrangler reports no authenticated Cloudflare account, and the user confirmed no hosted backend exists. No workers.dev URL or live deployment is claimed.
+
+## Render single-service package
+
+- `Dockerfile.render` built successfully with the managed proxy CA and TLS verification retained.
+- A separate synthetic PostgreSQL database was initialized and seeded by the combined container.
+- Functional checks passed for database-backed `/api/health`, Secure/HttpOnly login cookies, the dashboard API proxy, unauthenticated API rejection, a new job processed by the bundled worker, citation evidence, and default send protection.
+- The Blueprint explicitly requests free web/database plans. Provider eligibility, current free-plan availability/expiry, and Blueprint acceptance remain unverified until account provisioning.
+- No Render deployment actions or credentials were exposed to this session, including after the Render app was tagged. No public deployment or live URL is claimed.

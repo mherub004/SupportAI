@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+FROM node:22-bookworm-slim AS dashboard
+WORKDIR /build
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --strict-ssl=true --no-audit --no-fund
+COPY dashboard/ ./
+RUN npm run build
+
+FROM python:3.12-slim-bookworm AS backend
+WORKDIR /app
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv UV_LINK_MODE=copy
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    pip install --no-cache-dir uv==0.12.23
+COPY backend/pyproject.toml backend/uv.lock ./
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export SSL_CERT_FILE=/run/secrets/proxy_ca; fi; \
+    uv sync --frozen --no-dev
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then cp /run/secrets/proxy_ca /usr/local/share/ca-certificates/build-proxy.crt; update-ca-certificates; fi; \
+    apt-get update && apt-get install -y --no-install-recommends libstdc++6 && rm -rf /var/lib/apt/lists/*; \
+    rm -f /usr/local/share/ca-certificates/build-proxy.crt; update-ca-certificates --fresh
+COPY backend/app ./app
+COPY --from=dashboard /usr/local/bin/node /usr/local/bin/node
+COPY --from=dashboard /build/.next/standalone ./dashboard
+COPY --from=dashboard /build/.next/static ./dashboard/.next/static
+COPY deploy/render-start.sh ./render-start.sh
+RUN useradd --uid 10001 --create-home app && chown -R app:app /app && chmod +x /app/render-start.sh
+USER app
+ENV PATH="/app/.venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 NEXT_TELEMETRY_DISABLED=1
+EXPOSE 3000
+CMD ["/app/render-start.sh"]
