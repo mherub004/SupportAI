@@ -34,3 +34,11 @@ No live Gmail, Drive, Gemini, corporate SSO, Cloud Run deployment, backup restor
 - Functional checks passed for database-backed `/api/health`, Secure/HttpOnly login cookies, the dashboard API proxy, unauthenticated API rejection, a new job processed by the bundled worker, citation evidence, and default send protection.
 - The Blueprint explicitly requests free web/database plans. Provider eligibility, current free-plan availability/expiry, and Blueprint acceptance remain unverified until account provisioning.
 - No Render deployment actions or credentials were exposed to this session, including after the Render app was tagged. No public deployment or live URL is claimed.
+
+## Business onboarding update
+
+- Backend suite: **81 passed**, including encrypted storage/no secret echoes, preserved blank secrets, disconnect, expired/failed verification, hot-loaded draft-only activation, provider-context isolation, arbitrary business brands/general policies, source retirement, and additive upgrades preserving existing records.
+- Updated Render-ready image built successfully. A separate PostgreSQL test database was used; the existing demo and live Render database were not modified by these checks.
+- Browser suite against that deployable image: **3 passed**. Existing review/takeover/safety behavior, mobile layout, company profile/knowledge entry, masked secret persistence across reload, readiness blocking, and demo/live inbox separation were verified.
+- TypeScript type check and Python/helper lint passed. Live Google authorization and model behavior still require administrator-provided credentials and approval; read-only provider verification is available in Business setup.
+- PostgreSQL concurrency was rechecked with the provider-origin table: eight concurrent ingests still create one message/job, and eight send attempts still make one demo adapter call. The helper now refuses configured business databases.

@@ -105,3 +105,24 @@ def database(url):
 
 def audit(session, event, entity_id, actor="system", **details):
     session.add(Audit(event=event, entity_id=entity_id, actor=actor, details=details))
+
+
+class BusinessConfig(Base):
+    __tablename__ = "business_config"
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
+class Connector(Base):
+    __tablename__ = "connectors"
+    id: Mapped[str] = mapped_column(String(30), primary_key=True)
+    encrypted_config: Mapped[str] = mapped_column(Text)
+    verified_digest: Mapped[str] = mapped_column(String(64), default="")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class MessageOrigin(Base):
+    __tablename__ = "message_origins"
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
+    origin: Mapped[str] = mapped_column(String(400))

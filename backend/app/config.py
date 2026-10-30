@@ -7,6 +7,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore", hide_input_in_errors=True)
+    connector_encryption_key: str = ""
+    configured_business: bool = False
+    business_active: bool = False
+    review_only: bool = False
+    escalation_email: str = ""
+    business_name: str = "SupportFlow AI"
+    business_industry: str = "Customer support"
+    response_tone: str = "professional"
+    escalation_keywords: list[str] = []
+    supported_languages: list[str] = ["en", "de"]
     database_url: str = "sqlite:///./supportflow.db"
     operator_token: str
     connector_mode: Literal["demo", "google"] = "demo"
@@ -30,6 +40,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_settings(self):
+        if self.connector_encryption_key and len(self.connector_encryption_key) < 32:
+            raise ValueError("CONNECTOR_ENCRYPTION_KEY must have at least 32 characters")
         if len(self.operator_token) < 32:
             raise ValueError("OPERATOR_TOKEN must have at least 32 characters")
         if self.hourly_send_limit < 1 or self.retention_days < 1 or self.job_lease_seconds < 30:

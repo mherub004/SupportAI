@@ -7,11 +7,12 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.db import Conversation, Document, Job, Message, Send, State, audit, now
+from app.db import MessageOrigin, Conversation, Document, Job, Message, Send, State, audit, now
 from app.google import DemoMail, Drive, Gmail
 from app.policy import (SAFETY, classify, current, excluded, safe_response,
                         valid_recipient, validate_grounding)
 from app.providers import DemoModel, GeminiModel
+from app.business import origin, origin_matches
 
 
 class Conflict(Exception):
@@ -46,6 +47,8 @@ def ingest(session, email, config):
                 message.disposition = "excluded"
             session.add(message)
             session.flush()
+            session.add(MessageOrigin(message_id=email.id, origin=origin(config)))
+            session.flush()
     except IntegrityError:
         return False
     if message.status != "excluded":
@@ -66,11 +69,13 @@ def upsert_document(session, data):
     audit(session, "knowledge_updated", data.id, revision=data.revision, approved=data.approved)
 
 
-def retrieve(session, email):
+def retrieve(session, email, config=None):
     docs = [d for d in session.scalars(select(Document).where(
-        Document.brand == email.brand, Document.language == email.language)) if current(d)]
+        Document.brand == email.brand, Document.language == email.language)) if current(d) and (not config or not config.configured_business or not d.id.startswith("demo-"))]
     text = f"{email.subject}\n{email.body}".casefold()
     models = {d.model for d in docs if re.search(r"(?<!\w)" + re.escape(d.model.casefold()) + r"(?!\w)", text)}
+    if not models and any(d.model == "general" for d in docs):
+        models = {"general"}
     if len(models) != 1:
         email.model = "unknown"
         return []
@@ -102,9 +107,24 @@ class Workflow:
             email = session.scalar(select(Message).where(Message.id == message_id).with_for_update())
             if email is None or email.status != "queued":
                 return
+            if not origin_matches(session, email, self.config):
+                email.status, email.disposition = "archived", "excluded"
+                session.commit()
+                return
             conversation = session.get(Conversation, email.thread_id)
-            email.language, email.brand, email.risk_tags = classify(email)
-            docs = retrieve(session, email)
+            brand_query = select(Document.brand).distinct()
+            if self.config.configured_business:
+                brand_query = brand_query.where(~Document.id.like("demo-%"))
+            brands = list(session.scalars(brand_query)) or ["ABL", "Wallbox"]
+            email.language, email.brand, email.risk_tags = classify(email, brands)
+            if email.language not in self.config.supported_languages:
+                email.risk_tags = email.risk_tags + ["unsupported_language"]
+            if any(word in (email.subject + " " + email.body).casefold() for word in self.config.escalation_keywords):
+                email.risk_tags = email.risk_tags + ["business_escalation"]
+            if (self.config.configured_business and email.brand == "unknown"
+                    and self.config.business_name in brands):
+                email.brand = self.config.business_name
+            docs = retrieve(session, email, self.config)
             if conversation.paused or email.risk_tags:
                 email.response = safe_response(email.language)
                 email.disposition = "escalate" if set(email.risk_tags) & {
@@ -164,6 +184,8 @@ class Workflow:
     def create_draft(self, message_id):
         with self.factory() as session:
             email = session.scalar(select(Message).where(Message.id == message_id).with_for_update())
+            if not origin_matches(session, email, self.config):
+                raise Conflict("Message belongs to another provider context")
             if email.status != "ready":
                 return
             conversation = session.get(Conversation, email.thread_id)
@@ -202,12 +224,16 @@ class Workflow:
         return True
 
     def deliver(self, message_id, automatic=False):
+        if self.config.review_only:
+            raise Conflict("Business onboarding is draft-only; send through your human support process")
         with self.factory() as session:
             # Serialize rate-limit, kill-switch and reservation checks across workers.
             controls = session.scalar(select(State).where(State.key == "kill_switch").with_for_update())
             email = session.scalar(select(Message).where(Message.id == message_id).with_for_update())
             if not email:
                 raise Conflict("Message not found")
+            if not origin_matches(session, email, self.config):
+                raise Conflict("Message belongs to another provider context")
             conversation = session.scalar(select(Conversation).where(
                 Conversation.id == email.thread_id).with_for_update())
             sync_state = session.get(State, "knowledge_sync")
@@ -265,6 +291,8 @@ class Workflow:
     def approve(self, message_id, response, reason):
         with self.factory() as session:
             email = session.scalar(select(Message).where(Message.id == message_id).with_for_update())
+            if email and not origin_matches(session, email, self.config):
+                raise Conflict("Message belongs to another provider context")
             if not email or email.status != "draft" or session.get(Send, message_id):
                 raise Conflict("A confirmed, unsent draft is required")
             if email.risk_tags or email.disposition == "escalate" or SAFETY.search(response):
@@ -344,6 +372,8 @@ class Workflow:
             session.commit()
 
     def sync_drive(self):
+        if self.config.configured_business and not self.config.drive_folder_id:
+            return
         # Fail closed while fetching. A partial/failed refresh cannot authorize autosend.
         with self.factory() as session:
             state = session.get(State, "knowledge_sync")

@@ -27,3 +27,9 @@ This code is a single-organization pilot. It is not a multi-tenant SaaS, a certi
 10. **Dependencies and deployment:** run routine security scanning and updates, enforce HTTPS/access logs without secret headers, configure ingress/body limits, and review cloud IAM. Default localhost deployment is not an internet-facing hardened service.
 
 Never use company assets for commercial distribution without the plan's employer/IP and licensing approval. This repository includes only deliberately fictional sample content.
+
+## Business configuration update
+
+The setup API requires the same authenticated operator access as other administrative actions. Connector credentials are Fernet-encrypted; API/audit responses reveal configuration status and non-secret fields only. A separate CONNECTOR_ENCRYPTION_KEY can be set before initial configuration; otherwise OPERATOR_TOKEN derives the key. Key rotation requires a planned credential migration or secure re-entry.
+
+Business setup is restricted to draft-only processing, with a backend send prohibition. Connection verification is required before activation; changes pause processing. Each deployment/database belongs to one company, and a live mailbox identity cannot be reassigned through the setup UI. Existing pre-upgrade messages without provider identity cannot be processed by live connectors. This adds setup controls; it does not implement shared tenant hosting or replace enterprise SSO.

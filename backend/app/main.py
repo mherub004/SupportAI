@@ -5,10 +5,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import func, select, text
 
 from app.config import settings
-from app.db import Audit, Conversation, Document, Job, Message, Send, State, audit, database, now
+from app.business import runtime, install_routes
+from app.db import MessageOrigin, Audit, Conversation, Document, Job, Message, Send, State, audit, database, now
 from app.schemas import ControlsInput, EmailInput, KnowledgeInput, OwnershipInput, ReviewInput
 from app.service import Conflict, Workflow, enqueue, ingest, initialize, upsert_document
 
@@ -27,7 +29,7 @@ def create_app(config=None, db=None, workflow=None):
     app.state.config = config
 
     def flow():
-        return workflow or Workflow(config, factory)
+        return workflow or Workflow(runtime(config, factory), factory)
 
     def operator(authorization: str = Header(default="")):
         if not hmac.compare_digest(authorization, "Bearer " + config.operator_token):
@@ -36,6 +38,13 @@ def create_app(config=None, db=None, workflow=None):
     def session_dep():
         with factory() as session:
             yield session
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        return JSONResponse(status_code=422, content={
+            "detail": "Invalid request fields. Check required values, formats and length limits.",
+            "fields": [".".join(map(str, item["loc"])) for item in exc.errors()],
+        })
 
     @app.exception_handler(Conflict)
     async def conflict_handler(request, exc):
@@ -62,11 +71,15 @@ def create_app(config=None, db=None, workflow=None):
 
     @app.get("/api/overview", dependencies=secured)
     def overview(session=Depends(session_dep)):
-        counts = dict(session.execute(select(Message.status, func.count()).group_by(Message.status)).all())
+        effective = runtime(config, factory)
+        count_query = select(Message.status, func.count()).group_by(Message.status)
+        if effective.configured_business:
+            count_query = count_query.join(MessageOrigin).where(MessageOrigin.origin == "google:" + effective.mailbox.casefold())
+        counts = dict(session.execute(count_query).all())
         state = session.get(State, "kill_switch")
-        return {"mode": config.connector_mode, "mailbox": config.mailbox, "counts": counts,
+        return {"mode": ("setup" if effective.configured_business and not effective.business_active else effective.connector_mode), "mailbox": effective.mailbox, "company_name": effective.business_name, "draft_only": effective.review_only, "drive_connected": bool(effective.drive_folder_id), "escalation_email": effective.escalation_email, "counts": counts,
                 "kill_switch": state is None or state.value != "off",
-                "auto_send_enabled": config.auto_send_enabled and config.production_approved,
+                "auto_send_enabled": effective.auto_send_enabled and effective.production_approved,
                 "knowledge_sync": session.get(State, "knowledge_sync").value,
                 "failed_jobs": session.scalar(select(func.count()).select_from(Job).where(Job.status == "failed")),
                 "pending_jobs": session.scalar(select(func.count()).select_from(Job).where(Job.status.in_(["pending", "working"]))),
@@ -74,15 +87,21 @@ def create_app(config=None, db=None, workflow=None):
 
     @app.get("/api/messages", dependencies=secured)
     def messages(session=Depends(session_dep)):
+        effective = runtime(config, factory)
+        query = select(Message)
+        if effective.configured_business:
+            query = query.join(MessageOrigin).where(MessageOrigin.origin == "google:" + effective.mailbox.casefold())
         return [{"id": m.id, "thread_id": m.thread_id, "sender": m.sender, "subject": m.subject,
                  "status": m.status, "disposition": m.disposition, "language": m.language,
                  "brand": m.brand, "risk_tags": m.risk_tags, "created_at": m.created_at}
-                for m in session.scalars(select(Message).order_by(Message.created_at.desc()).limit(200))]
+                for m in session.scalars(query.order_by(Message.created_at.desc()).limit(200))]
 
     @app.get("/api/messages/{message_id}", dependencies=secured)
     def message(message_id: str, session=Depends(session_dep)):
         m = session.get(Message, message_id)
-        if not m:
+        effective = runtime(config, factory)
+        entry = session.get(MessageOrigin, message_id)
+        if not m or (effective.configured_business and (not entry or entry.origin != "google:" + effective.mailbox.casefold())):
             raise HTTPException(404, "Message not found")
         conversation = session.get(Conversation, m.thread_id)
         send = session.get(Send, m.id)
@@ -95,7 +114,8 @@ def create_app(config=None, db=None, workflow=None):
 
     @app.post("/api/demo/messages", status_code=202, dependencies=secured)
     def demo_ingest(email: EmailInput, session=Depends(session_dep)):
-        if config.connector_mode != "demo":
+        effective = runtime(config, factory)
+        if effective.configured_business or effective.connector_mode != "demo":
             raise HTTPException(403, "Demo ingest is disabled in Google mode")
         created = ingest(session, email, config)
         session.commit()
@@ -128,6 +148,8 @@ def create_app(config=None, db=None, workflow=None):
 
     @app.put("/api/controls", dependencies=secured)
     def controls(data: ControlsInput, session=Depends(session_dep)):
+        if not data.kill_switch and runtime(config, factory).review_only:
+            raise Conflict("Business setup is draft-only; sending stays disabled")
         record = session.scalar(select(State).where(State.key == "kill_switch").with_for_update())
         record.value = "on" if data.kill_switch else "off"
         audit(session, "kill_switch_changed", "mailbox", actor="operator", enabled=data.kill_switch)
@@ -136,11 +158,13 @@ def create_app(config=None, db=None, workflow=None):
 
     @app.get("/api/knowledge", dependencies=secured)
     def knowledge(session=Depends(session_dep)):
+        effective = runtime(config, factory)
         return [{"id": d.id, "title": d.title, "revision": d.revision, "brand": d.brand,
                  "model": d.model, "language": d.language, "owner": d.owner, "approved": d.approved,
                  "visibility": d.visibility, "url": d.url, "customer_url": d.customer_url, "effective_at": d.effective_at,
                  "expires_at": d.expires_at, "checksum": d.checksum}
-                for d in session.scalars(select(Document).order_by(Document.title).limit(500))]
+                for d in session.scalars(select(Document).order_by(Document.title).limit(500))
+                if not effective.configured_business or not d.id.startswith("demo-")]
 
     @app.put("/api/knowledge", dependencies=secured)
     def put_knowledge(data: KnowledgeInput, session=Depends(session_dep)):
@@ -150,10 +174,25 @@ def create_app(config=None, db=None, workflow=None):
         session.commit()
         return {"status": "saved"}
 
+    @app.post("/api/knowledge/{document_id}/retire", dependencies=secured)
+    def retire_knowledge(document_id: str, session=Depends(session_dep)):
+        if document_id.startswith("drive:"):
+            raise Conflict("Change approval in Drive and synchronize the source")
+        document = session.get(Document, document_id)
+        if not document:
+            raise HTTPException(404, "Knowledge source not found")
+        document.approved, document.visibility = False, "retired"
+        audit(session, "knowledge_retired", document_id, actor="operator")
+        session.commit()
+        return {"status": "retired"}
+
     @app.post("/api/sync/{kind}", status_code=202, dependencies=secured)
     def sync(kind: str, session=Depends(session_dep)):
-        if config.connector_mode != "google" or kind not in {"gmail", "drive", "watch"}:
+        effective = runtime(config, factory)
+        if effective.connector_mode != "google" or kind not in {"gmail", "drive", "watch"}:
             raise HTTPException(400, "Google mode and gmail, drive or watch are required")
+        if kind == "drive" and not effective.drive_folder_id:
+            raise Conflict("Configure and verify a Drive folder first")
         job_kind = "watch" if kind == "watch" else kind + "_sync"
         key = f"{job_kind}:manual:{int(now().timestamp())}"
         enqueue(session, key, job_kind, {})
@@ -176,8 +215,9 @@ def create_app(config=None, db=None, workflow=None):
     @app.post("/webhooks/gmail", status_code=202)
     def webhook(request: Request, envelope: dict, authorization: str = Header(default=""),
                 session=Depends(session_dep)):
-        if (config.connector_mode != "google" or not config.google_pubsub_audience
-                or not config.google_pubsub_service_account):
+        effective = runtime(config, factory)
+        if (effective.connector_mode != "google" or not effective.google_pubsub_audience
+                or not effective.google_pubsub_service_account):
             raise HTTPException(503, "Authenticated Pub/Sub is not configured")
         from google.auth.transport.requests import Request as GoogleRequest
         from google.oauth2.id_token import verify_oauth2_token
@@ -185,14 +225,14 @@ def create_app(config=None, db=None, workflow=None):
             scheme, token = authorization.split(" ", 1)
             if scheme.lower() != "bearer":
                 raise ValueError("Bearer token required")
-            claims = verify_oauth2_token(token, GoogleRequest(), audience=config.google_pubsub_audience)
-            if (claims.get("email") != config.google_pubsub_service_account or claims.get("email_verified") is not True):
+            claims = verify_oauth2_token(token, GoogleRequest(), audience=effective.google_pubsub_audience)
+            if (claims.get("email") != effective.google_pubsub_service_account or claims.get("email_verified") is not True):
                 raise ValueError("Unexpected push identity")
         except Exception:
             raise HTTPException(401, "Invalid Pub/Sub identity") from None
         try:
             notification = json.loads(base64.b64decode(envelope["message"]["data"], validate=True))
-            if notification["emailAddress"].casefold() != config.mailbox.casefold():
+            if notification["emailAddress"].casefold() != effective.mailbox.casefold():
                 raise ValueError("Wrong mailbox")
             history_id = str(notification["historyId"])
             if not history_id.isdigit():
@@ -203,4 +243,5 @@ def create_app(config=None, db=None, workflow=None):
         session.commit()
         return {"status": "queued"}
 
+    install_routes(app, config, factory, operator)
     return app

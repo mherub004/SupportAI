@@ -1,6 +1,6 @@
 # SupportFlow AI
 
-A runnable, draft-first email support pilot based on the [uploaded project plan](docs/PROJECT_PLAN.md). FastAPI + Next.js/TypeScript + PostgreSQL, with Gmail, Drive and Gemini adapters behind replaceable interfaces.
+A configurable, draft-first support workspace for a business, with FastAPI, Next.js/TypeScript, PostgreSQL, and optional Gmail/Drive/Gemini connections. Deploy first, then complete **Business setup** in the application. Use one isolated installation and database per company. See [business onboarding](docs/BUSINESS_SETUP.md).
 
 **This is a pilot implementation, not an authorized production agent.** It starts with synthetic data, automatic sending disabled, and the mailbox kill switch enabled. No real ABL/Wallbox manuals, customer data, company approvals, or invented API credentials are included. The full plan describes a 14–18 week organizational rollout; [delivery status](docs/DELIVERY_STATUS.md) distinguishes implemented capabilities from approval/access and future work.
 
@@ -59,6 +59,10 @@ npm run test:e2e
 ```
 
 If Chromium is already installed, use `CHROMIUM_PATH=/usr/bin/chromium npm run test:e2e`. End-to-end tests only change synthetic review/ownership state and do not send email. Synthetic bilingual evaluation cases live in `backend/evaluation/cases.jsonl`; their assertions are included in pytest. They do **not** establish the plan's SME-reviewed factual-correctness gate.
+
+## Configure any business after deployment
+
+The Business setup screen supports company details, response tone, human escalation policies, approved knowledge entry, encrypted connector settings, read-only verification, and draft-only activation. Unconfigured providers stay inactive. Saving changes pauses processing. Existing demo data is retained separately from live provider identities. Supported integrations are listed explicitly; unsupported services cannot be connected yet.
 
 ## What works
 

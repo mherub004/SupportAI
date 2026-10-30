@@ -12,6 +12,7 @@ test("operator reviews grounded draft, inspects risk, and pauses thread", async 
   await page.goto("/");
   await page.getByLabel("Operator access token").fill(env.OPERATOR_TOKEN);
   await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: /^Inbox(?:\s+\d+)?$/ }).click();
   await expect(page.getByRole("heading", { name: "Your review workspace" })).toBeVisible();
   await expect(page.getByText("Synthetic customers and documents. No real email is sent.")).toBeVisible();
   await page.screenshot({ path: "/tmp/supportflow-inbox.png", fullPage: true });
@@ -58,6 +59,7 @@ test("mobile workspace fits viewport", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Operator access token").fill(env.OPERATOR_TOKEN);
   await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: /^Inbox(?:\s+\d+)?$/ }).click();
   await expect(page.getByRole("heading", { name: "Your review workspace" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: "/tmp/supportflow-mobile.png", fullPage: true });

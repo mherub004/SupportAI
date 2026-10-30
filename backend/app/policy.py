@@ -26,10 +26,10 @@ def valid_recipient(sender):
     return bool(re.fullmatch(r"[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+", address))
 
 
-def classify(email):
+def classify(email, product_brands=("ABL", "Wallbox")):
     text = f"{email.subject}\n{email.body}"
     language = "de" if re.search(r"\b(hallo|bitte|mein|meine|ladegerät|anleitung|fehler|und|nicht)\b", text, re.I) else "en"
-    brands = [brand for brand in ("ABL", "Wallbox") if re.search(rf"\b{brand}\b", text, re.I)]
+    brands = [brand for brand in product_brands if re.search(r"(?<!\w)" + re.escape(brand) + r"(?!\w)", text, re.I)]
     brand = brands[0] if len(brands) == 1 else "unknown"
     tags = []
     if SAFETY.search(text):

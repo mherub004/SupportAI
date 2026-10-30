@@ -19,3 +19,7 @@ This is a demonstration, not always-on production email automation. Do not conne
 ## What can be verified without an account
 
 The combined image can be built locally and tested against PostgreSQL, including schema initialization, synthetic seed, health, login, backend proxy and actual queue processing. Local tests cannot verify Render account eligibility, Blueprint acceptance or successful public deployment. Signing in and approving the provider's resource creation must happen in your own account.
+
+## Configure your company
+
+After deployment, sign in and use Business setup. No business/provider credentials are required to launch. See [onboarding](BUSINESS_SETUP.md). Existing deployments receive additive configuration tables automatically at startup; customer/source records are preserved. Keep OPERATOR_TOKEN stable because it is the default connector-encryption key source. Free service sleep still prevents reliable scheduled processing.

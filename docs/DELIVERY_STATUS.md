@@ -26,3 +26,9 @@ The proposed ≥95% factual correctness, zero observed critical safety errors on
 | YOUR_APPROVED_CASE | | | | | | | | |
 
 Assess each risk/language/category separately. Zero observed errors is bounded evidence, not proof of universal safety. Do not enable automated customer replies solely because tests pass.
+
+## Business setup extension
+
+The deployable app now opens Business setup and supports persistent company/profile policies, encrypted Google/Gemini configuration, read-only access verification, approved manual knowledge entry/retirement, readiness checks, and draft-only activation without redeployment. Product families are configurable; company-wide `general` policies are supported. API/worker settings reload from the database, while provider origins keep demo messages out of live Gmail operations.
+
+The deployment model is still **one installation/database per company**, not public multi-tenant signup. Google OAuth consent/administrator provisioning, individual staff SSO/RBAC, unsupported connector implementations, regulated-industry policy approval, and always-on production operations remain separate requirements. There is no claim of automatic compatibility with every service or business process.

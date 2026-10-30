@@ -24,4 +24,4 @@ async function proxy(request: NextRequest, context: Context) {
     return NextResponse.json({ detail: "Backend unavailable" }, { status: 503 });
   }
 }
-export { proxy as GET, proxy as POST, proxy as PUT };
+export { proxy as GET, proxy as POST, proxy as PUT, proxy as DELETE };

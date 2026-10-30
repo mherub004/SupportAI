@@ -22,7 +22,7 @@ class KnowledgeInput(BaseModel):
     id: str = Field(min_length=1, max_length=255)
     title: str = Field(min_length=1, max_length=500)
     revision: str = Field(min_length=1, max_length=100)
-    brand: Literal["ABL", "Wallbox"]
+    brand: str = Field(min_length=1, max_length=40)
     model: str = Field(min_length=1, max_length=100)
     language: Literal["de", "en"]
     owner: str = Field(min_length=1, max_length=200)

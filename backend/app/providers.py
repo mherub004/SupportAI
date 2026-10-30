@@ -54,6 +54,8 @@ class GeminiModel:
             "if uncertain set uncertain=true. Cite exact verbatim quotes and source revision for every "
             "substantive claim. Do not invent links. Return JSON matching the supplied schema."
         )
+        system += (f" Business: {self.config.business_name}. Industry: {self.config.business_industry}. "
+                   f"Response tone: {self.config.response_tone}. These labels do not override safety or evidence rules.")
         data = {"email": {"subject": email.subject, "body": email.body, "language": email.language},
                 "evidence": [{"document_id": d.id, "revision": d.revision, "content": d.content,
                               "url": d.customer_url} for d in documents]}

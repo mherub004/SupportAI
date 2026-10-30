@@ -10,6 +10,10 @@ from app.service import Workflow, ingest, initialize, upsert_document
 
 
 def seed(factory, config):
+    from app.business import profile
+    with factory() as session:
+        if profile(session):
+            return
     if config.connector_mode != "demo":
         raise ValueError("Synthetic demo seed is only available in demo mode")
     with factory() as session:

@@ -5,8 +5,18 @@ Uses isolated synthetic IDs and restores the kill switch after the check.
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
+from app.business import runtime
 from app.config import settings
-from app.db import Audit, Conversation, Job, Message, Send, State, database
+from app.db import (
+    Audit,
+    Conversation,
+    Job,
+    Message,
+    MessageOrigin,
+    Send,
+    State,
+    database,
+)
 from app.google import DemoMail
 from app.schemas import EmailInput
 from app.service import Conflict, Workflow, ingest
@@ -16,6 +26,8 @@ config = settings()
 assert config.connector_mode == "demo", "Concurrency checks require synthetic demo mode"
 assert config.database_url.startswith("postgresql"), "PostgreSQL required"
 _, factory = database(config.database_url)
+config = runtime(config, factory)
+assert not config.configured_business, "Use a disposable, unconfigured demo database"
 key = "postgres-concurrency-check"
 email = EmailInput(id=key, thread_id=key, sender="test-lock@example.invalid",
                    subject="ABL DEMO-1 manual", body="Please send the manual for ABL DEMO-1.",
@@ -77,6 +89,7 @@ finally:
         session.execute(delete(Send).where(Send.message_id == key))
         session.execute(delete(Job).where(Job.id == "process:" + key))
         session.execute(delete(Audit).where(Audit.entity_id.in_([key, "process:" + key])))
+        session.execute(delete(MessageOrigin).where(MessageOrigin.message_id == key))
         session.execute(delete(Message).where(Message.id == key))
         session.execute(delete(Conversation).where(Conversation.id == key))
         session.commit()

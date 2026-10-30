@@ -6,6 +6,7 @@ from datetime import timedelta
 from sqlalchemy import or_, select, update
 
 from app.config import settings
+from app.business import runtime
 from app.db import Job, State, audit, database, now
 from app.service import Workflow, enqueue, initialize
 
@@ -72,7 +73,8 @@ def schedule(factory, config):
     tick = int(time.time())
     with factory() as session:
         enqueue(session, f"gmail_sync:{tick // 60}", "gmail_sync", {})
-        enqueue(session, f"drive_sync:{tick // 3600}", "drive_sync", {})
+        if config.drive_folder_id:
+            enqueue(session, f"drive_sync:{tick // 3600}", "drive_sync", {})
         if config.gmail_topic:
             enqueue(session, f"watch:{tick // 86400}", "watch", {})
         session.commit()
@@ -85,10 +87,16 @@ def main():
     config = settings()
     engine, factory = database(config.database_url)
     initialize(engine, factory)
-    workflow = Workflow(config, factory)
     logging.basicConfig(level=logging.INFO)
     while True:
-        schedule(factory, config)
+        effective = runtime(config, factory)
+        if effective.configured_business and not effective.business_active:
+            if args.once:
+                break
+            time.sleep(2)
+            continue
+        workflow = Workflow(effective, factory)
+        schedule(factory, effective)
         ran = run_one(factory, workflow)
         if args.once:
             break
