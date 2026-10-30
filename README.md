@@ -102,3 +102,7 @@ See [architecture](docs/ARCHITECTURE.md), [runbook](docs/RUNBOOK.md), and [deliv
 ## Cloudflare Workers
 
 The Next.js dashboard has an OpenNext Workers deployment target. The Python API, background worker, and PostgreSQL need a separate HTTPS backend host. See [Cloudflare deployment](docs/CLOUDFLARE.md) for account authorization, secret configuration, build, and deployment steps.
+
+## Email + knowledge + CRM integrations
+
+[Follow the guided integration setup](docs/INTEGRATIONS.md). Register each OAuth app once, then connect Google, Salesforce or NetSuite through provider sign-in. Browse and approve original Drive documents used by NotebookLM. Gmail holds the generated drafts; optional CRM customer lookups are available to reviewers and never modify records or automatically disclose account facts.

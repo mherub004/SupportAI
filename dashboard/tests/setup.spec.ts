@@ -20,6 +20,7 @@ test("company configures profile, approved knowledge and encrypted connection af
   await setup.getByRole("button", { name: "Save company profile" }).click();
   await expect(setup.getByRole("status")).toContainText("Company profile saved");
   await expect(page.getByText("Setup in progress", { exact: true })).toBeVisible();
+  await setup.getByText("Or paste an approved source manually", { exact: true }).click();
   await setup.getByLabel("Source title", { exact: true }).fill("Acme customer account FAQ");
   await setup.getByLabel("Business / product family").fill("Acme Services UI");
   await setup.getByLabel("Knowledge owner").fill("Demo reviewer");

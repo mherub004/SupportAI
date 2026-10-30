@@ -18,7 +18,11 @@ PY
 )"
 export API_URL=http://127.0.0.1:8000
 export COOKIE_SECURE=true
-if [[ -n "${RENDER_EXTERNAL_URL:-}" ]]; then export DASHBOARD_ORIGIN="$RENDER_EXTERNAL_URL"; fi
+if [[ -n "${PUBLIC_APP_URL:-}" ]]; then
+  export DASHBOARD_ORIGIN="$PUBLIC_APP_URL"
+elif [[ -z "${DASHBOARD_ORIGIN:-}" && -n "${RENDER_EXTERNAL_URL:-}" ]]; then
+  export DASHBOARD_ORIGIN="$RENDER_EXTERNAL_URL"
+fi
 python -m app.cli init-db
 if [[ "${CONNECTOR_MODE:-demo}" == demo ]]; then python -m app.cli seed-demo; fi
 uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 &

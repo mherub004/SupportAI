@@ -126,3 +126,22 @@ class MessageOrigin(Base):
     __tablename__ = "message_origins"
     message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
     origin: Mapped[str] = mapped_column(String(400))
+
+
+class OAuthAttempt(Base):
+    __tablename__ = "oauth_attempts"
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(30))
+    binding_hash: Mapped[str] = mapped_column(String(64))
+    encrypted_payload: Mapped[str] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    consumed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class DriveApproval(Base):
+    __tablename__ = "drive_approvals"
+    file_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    revision: Mapped[str] = mapped_column(String(100))
+    modified_time: Mapped[str] = mapped_column(String(100))
+    approved: Mapped[bool] = mapped_column(Boolean, default=False)
+    source_metadata: Mapped[dict] = mapped_column(JSON)

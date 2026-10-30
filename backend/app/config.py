@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=("../.env", ".env"), extra="ignore", hide_input_in_errors=True)
+    public_app_url: str = ""
+    render_external_url: str = ""
     connector_encryption_key: str = ""
     configured_business: bool = False
     business_active: bool = False

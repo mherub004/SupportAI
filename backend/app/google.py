@@ -203,60 +203,70 @@ class Gmail(GoogleClient):
 
 
 class Drive(GoogleClient):
-    def documents(self):
-        """Return complete folder inventory before caller atomically updates registry.
+    def __init__(self, config, approvals=None):
+        super().__init__(config)
+        self.approvals = approvals or {}
 
-        Approval metadata lives in Drive appProperties managed by this OAuth app:
-        supportflow_approved=true, brand, model, language, owner, visibility,
-        effective_at, expires_at (optional). Missing metadata never grants approval.
-        """
-        folder = self.config.drive_folder_id
-        if not folder or not all(c.isalnum() or c in "_-" for c in folder):
-            raise ValueError("DRIVE_FOLDER_ID is required and must be a Drive ID")
-        from datetime import datetime
-        from io import BytesIO
-        from pypdf import PdfReader
-        from app.schemas import KnowledgeInput
-
-        inventory = list(self.pages("drive/v3/files", "files", {
+    def inventory(self):
+        from app.drive_setup import folder_id
+        folder = folder_id(self.config.drive_folder_id)
+        return list(self.pages("drive/v3/files", "files", {
             "q": f"'{folder}' in parents and trashed = false", "supportsAllDrives": "true",
             "includeItemsFromAllDrives": "true", "pageSize": 100,
             "fields": "nextPageToken,files(id,name,mimeType,version,modifiedTime,webViewLink,appProperties)",
         }))
+
+    def export(self, file):
+        from io import BytesIO
+        from pypdf import PdfReader
+        file_id = quote(file["id"], safe="")
+        mime = file["mimeType"]
+        if mime == "application/vnd.google-apps.document":
+            content = self.request("GET", f"drive/v3/files/{file_id}/export",
+                                   params={"mimeType": "text/plain"}).text
+        elif mime in {"text/plain", "text/markdown", "application/pdf"}:
+            raw = self.request("GET", f"drive/v3/files/{file_id}", params={
+                "alt": "media", "supportsAllDrives": "true"
+            }).content
+            if len(raw) > 10_000_000:
+                raise ValueError("Knowledge file exceeds 10MB limit")
+            content = ("\n\n".join(f"[Page {index + 1}]\n" + (page.extract_text() or "")
+                                  for index, page in enumerate(PdfReader(BytesIO(raw)).pages))
+                       if mime == "application/pdf" else raw.decode("utf-8"))
+        else:
+            raise ValueError("Use Docs, text, Markdown or text-extractable PDF")
+        if not content.strip() or len(content) > 200000:
+            raise ValueError("Source must have extractable text and at most 200,000 characters; split larger files")
+        refreshed = self.request("GET", f"drive/v3/files/{file_id}", params={
+            "fields": "version,modifiedTime", "supportsAllDrives": "true"
+        }).json()
+        if (refreshed.get("version") != file.get("version")
+                or refreshed.get("modifiedTime") != file.get("modifiedTime")):
+            raise ValueError("Source changed during export; preview it again")
+        return content
+
+    def documents(self):
+        from datetime import datetime
+        from app.schemas import KnowledgeInput
         result = []
-        for file in inventory:
-            props = file.get("appProperties", {})
-            if props.get("supportflow_approved") != "true" or props.get("visibility") != "customer_safe":
-                continue
-            file_id = quote(file["id"], safe="")
-            mime = file["mimeType"]
-            if mime == "application/vnd.google-apps.document":
-                content = self.request("GET", f"drive/v3/files/{file_id}/export",
-                                       params={"mimeType": "text/plain"}).text
-            elif mime in {"text/plain", "text/markdown", "application/pdf"}:
-                raw = self.request("GET", f"drive/v3/files/{file_id}", params={
-                    "alt": "media", "supportsAllDrives": "true"
-                }).content
-                if len(raw) > 10_000_000:
-                    raise ValueError("Knowledge file exceeds 10MB limit")
-                content = ("\n\n".join(f"[Page {index + 1}]\n" + (page.extract_text() or "")
-                                      for index, page in enumerate(PdfReader(BytesIO(raw)).pages))
-                           if mime == "application/pdf" else raw.decode("utf-8"))
+        for file in self.inventory():
+            local = self.approvals.get(file["id"])
+            if local is not None:
+                if (not local["approved"] or local["revision"] != str(file.get("version", ""))
+                        or local["modified_time"] != file.get("modifiedTime")):
+                    continue
+                props = local["metadata"]
             else:
-                raise ValueError("Approved file has unsupported format")
-            refreshed = self.request("GET", f"drive/v3/files/{file_id}", params={
-                "fields": "version,modifiedTime", "supportsAllDrives": "true"
-            }).json()
-            if (refreshed.get("version") != file.get("version")
-                    or refreshed.get("modifiedTime") != file.get("modifiedTime")):
-                raise ValueError("Knowledge source changed during export; sync must retry")
+                props = file.get("appProperties", {})
+                if props.get("supportflow_approved") != "true" or props.get("visibility") != "customer_safe":
+                    continue
+            content = self.export(file)
             result.append(KnowledgeInput(
-                id="drive:" + file["id"], title=file["name"], revision=file.get("version", file["modifiedTime"]),
+                id="drive:" + file["id"], title=file["name"], revision=str(file.get("version", file["modifiedTime"])),
                 brand=props["brand"], model=props["model"], language=props["language"], owner=props["owner"],
                 approved=True, visibility="customer_safe", content=content,
                 effective_at=datetime.fromisoformat(props["effective_at"].replace("Z", "+00:00")),
-                expires_at=datetime.fromisoformat(props["expires_at"].replace("Z", "+00:00"))
-                if props.get("expires_at") else None,
+                expires_at=datetime.fromisoformat(props["expires_at"].replace("Z", "+00:00")) if props.get("expires_at") else None,
                 url=file.get("webViewLink", f"https://drive.google.com/file/d/{file['id']}/view"),
                 customer_url=props.get("customer_url", ""),
             ))

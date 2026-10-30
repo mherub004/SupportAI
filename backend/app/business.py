@@ -14,12 +14,17 @@ from sqlalchemy import select
 from app.db import Message, BusinessConfig, Connector, Document, Job, MessageOrigin, State, audit, now
 from app.policy import current, valid_recipient
 
-SECRET_FIELDS = {"google_refresh_token", "google_client_secret", "gmail_access_token", "gemini_api_key"}
+SECRET_FIELDS = {"google_refresh_token", "google_client_secret", "gmail_access_token", "gemini_api_key", "salesforce_client_secret", "salesforce_refresh_token", "salesforce_access_token",
+                 "netsuite_client_secret", "netsuite_refresh_token", "netsuite_access_token"}
 FIELDS = {
     "google": {"mailbox", "google_client_id", "google_client_secret", "google_refresh_token",
                "gmail_access_token", "drive_folder_id", "gmail_topic", "google_pubsub_audience",
                "google_pubsub_service_account"},
     "gemini": {"gemini_api_key", "gemini_model"},
+    "salesforce": {"salesforce_client_id", "salesforce_client_secret", "salesforce_login_url",
+                   "salesforce_instance_url", "salesforce_refresh_token", "salesforce_access_token"},
+    "netsuite": {"netsuite_account_id", "netsuite_client_id", "netsuite_client_secret",
+                 "netsuite_refresh_token", "netsuite_access_token"},
 }
 
 
@@ -117,7 +122,7 @@ def runtime(base, factory):
         if not updates["business_active"]:
             updates["connector_mode"] = "demo"
         else:
-            for key in FIELDS:
+            for key in ("google", "gemini"):
                 record = session.get(Connector, key)
                 if not record or not record.enabled:
                     raise ValueError("Active business requires connected providers")
@@ -145,7 +150,7 @@ def public_connector(record, base):
         return {"configured": False, "fields": {}, "secret_fields_set": [], "verified": False}
     fields = decode(record, base)
     return {"configured": True,
-            "fields": {k: v for k, v in fields.items() if k not in SECRET_FIELDS},
+            "fields": {k: v for k, v in fields.items() if k not in SECRET_FIELDS and not k.startswith("_")},
             "secret_fields_set": [k for k in SECRET_FIELDS if fields.get(k)],
             "verified": bool(record.verified_at and record.verified_at > now() - timedelta(hours=24)
                              and record.verified_digest == digest(fields)),
@@ -155,8 +160,9 @@ def public_connector(record, base):
 def save_connector(session, key, data, base):
     if key not in FIELDS or set(data) - FIELDS[key]:
         raise ValueError("Unsupported connector or configuration field")
-    record = session.get(Connector, key)
+    record = session.scalar(select(Connector).where(Connector.id == key).with_for_update())
     fields = decode(record, base) if record and record.enabled else {}
+    previous = dict(fields)
     # Blank secret inputs preserve existing credentials; disconnect removes them.
     fields.update({k: v.strip() for k, v in data.items() if k not in SECRET_FIELDS or v.strip()})
     if key == "google" and fields.get("mailbox"):
@@ -169,13 +175,48 @@ def save_connector(session, key, data, base):
         import re
         if fields.get("gemini_model") and not re.fullmatch(r"[A-Za-z0-9._-]+", fields["gemini_model"]):
             raise ValueError("Invalid model identifier")
+    if key == "google" and fields.get("drive_folder_id"):
+        from app.drive_setup import folder_id
+        fields["drive_folder_id"] = folder_id(fields["drive_folder_id"])
+    if key == "salesforce":
+        from app.crm import salesforce_origin, salesforce_login
+        fields["salesforce_login_url"] = salesforce_login(fields.get("salesforce_login_url"))
+        if fields.get("salesforce_instance_url"):
+            fields["salesforce_instance_url"] = salesforce_origin(fields["salesforce_instance_url"])
+    if key == "netsuite" and fields.get("netsuite_account_id"):
+        from app.crm import netsuite_account
+        netsuite_account(fields["netsuite_account_id"])
+    identity_fields = {"google": ("mailbox", "google_client_id", "google_client_secret"),
+                       "salesforce": ("salesforce_client_id", "salesforce_client_secret", "salesforce_login_url"),
+                       "netsuite": ("netsuite_account_id", "netsuite_client_id", "netsuite_client_secret")}
+    if key in identity_fields and previous:
+        changed = any(previous.get(name) != fields.get(name) for name in identity_fields[key])
+        refresh_name = key + "_refresh_token"
+        access_name = "gmail_access_token" if key == "google" else key + "_access_token"
+        if changed:
+            if not data.get(refresh_name):
+                fields.pop(refresh_name, None)
+            if not data.get(access_name):
+                fields.pop(access_name, None)
+            fields.pop("_organization_id", None)
+            fields.pop("_access_expires", None)
+        if previous.get(refresh_name) != fields.get(refresh_name) and not data.get(access_name):
+            fields.pop(access_name, None)
+            fields.pop("_access_expires", None)
+    if key == "google" and previous and previous.get("drive_folder_id") != fields.get("drive_folder_id"):
+        for source in session.scalars(select(Document).where(Document.id.like("drive:%"))):
+            source.approved = False
+        state = session.get(State, "knowledge_sync")
+        if state:
+            state.value = "current"
     ciphertext = cipher(base).encrypt(json.dumps(fields).encode()).decode()
     if record:
         record.encrypted_config, record.enabled = ciphertext, True
         record.verified_at, record.verified_digest = None, ""
     else:
         session.add(Connector(id=key, encrypted_config=ciphertext))
-    pause(session)
+    if key in {"google", "gemini"}:
+        pause(session)
     audit(session, "connector_saved", key, actor="operator", changed_fields=sorted(data))
 
 
@@ -219,8 +260,8 @@ def readiness(session, base):
                        "gemini_verified": connections["gemini"]["verified"],
                        "policy_acknowledged": bool(business and business.get("acknowledgement"))},
             "deployment_model": "One isolated deployment and database per company",
-            "supported_integrations": ["Gmail", "Google Drive", "Gemini", "Manual knowledge"],
-            "unavailable_integrations": ["Microsoft 365", "Salesforce", "Shopify", "WhatsApp"],
+            "supported_integrations": ["Gmail", "Google Drive", "Gemini", "Salesforce (read-only)", "NetSuite (read-only)", "Manual knowledge"],
+            "unavailable_integrations": ["Microsoft 365", "Shopify", "WhatsApp"],
             "sending_mode": "draft_only"}
 
 
@@ -297,7 +338,8 @@ def install_routes(app, base, factory, operator):
             record = session.get(Connector, key)
             if record:
                 session.delete(record)
-            pause(session)
+            if key in {"google", "gemini"}:
+                pause(session)
             audit(session, "connector_disconnected", key, actor="operator")
             session.commit()
         return {"status": "disconnected"}
@@ -313,13 +355,31 @@ def install_routes(app, base, factory, operator):
             fields = decode(record, base)
             tested_digest = digest(fields)
         try:
+            if key in {"salesforce", "netsuite"}:
+                from app.crm import client_for
+                with factory() as session:
+                    client = client_for(session, key, base)
+                    expected_digest = digest(client.fields)
+                    identity = client.verify()
+                    session.expire_all()
+                    record = session.scalar(select(Connector).where(Connector.id == key).with_for_update())
+                    if not record or digest(decode(record, base)) != expected_digest:
+                        raise Conflict("Configuration changed during verification; test it again")
+                    fields = decode(record, base)
+                    if key == "salesforce":
+                        fields["_organization_id"] = identity
+                        record.encrypted_config = cipher(base).encrypt(json.dumps(fields).encode()).decode()
+                    record.verified_digest, record.verified_at = digest(fields), now()
+                    session.commit()
+                return {"status": "verified", "valid_hours": 24}
             verify_connector(key, fields, base)
         except Exception:
             with factory() as session:
                 record = session.get(Connector, key)
-                if record:
+                if record and (key in {"salesforce", "netsuite"} or digest(decode(record, base)) == tested_digest):
                     record.verified_at, record.verified_digest = None, ""
-                pause(session)
+                if key in {"google", "gemini"}:
+                    pause(session)
                 audit(session, "connector_verification_failed", key, actor="operator")
                 session.commit()
             raise HTTPException(422, "Connection verification failed. Check credentials, mailbox identity, model/folder access and outbound networking. No customer messages were sent.") from None

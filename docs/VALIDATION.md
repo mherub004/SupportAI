@@ -42,3 +42,11 @@ No live Gmail, Drive, Gemini, corporate SSO, Cloud Run deployment, backup restor
 - Browser suite against that deployable image: **3 passed**. Existing review/takeover/safety behavior, mobile layout, company profile/knowledge entry, masked secret persistence across reload, readiness blocking, and demo/live inbox separation were verified.
 - TypeScript type check and Python/helper lint passed. Live Google authorization and model behavior still require administrator-provided credentials and approval; read-only provider verification is available in Business setup.
 - PostgreSQL concurrency was rechecked with the provider-origin table: eight concurrent ingests still create one message/job, and eight send attempts still make one demo adapter call. The helper now refuses configured business databases.
+
+## Guided integration release
+
+- Backend suite: **107 passed**. Additional cases cover PKCE/state/browser binding, one-time/expired OAuth sessions, token/error redaction, trusted provider origins, fixed/escaped read-only customer queries, rotating token persistence, concurrent credential edits, Drive folder scope, preview/revision approval and revocation, sync-versus-retirement races, and bounded exact-source excerpts for larger documents.
+- Production Next.js build and type checking passed. The combined deployment image was built; final backend source was layered into the same validated runtime/dependencies for the final container check.
+- Browser suite against the PostgreSQL-backed deployment container: **4 passed**. This includes guided Google account connection with PKCE, an HttpOnly browser binding, rejected forged callback, existing review/safety/ownership behavior, mobile layout, and persisted company/secret setup.
+- The final startup script was checked with an explicit dashboard origin differing from Render's supplied origin; the same four browser tests passed with the explicit origin taking precedence.
+- The external provider consent page is mocked in the browser test; provider REST/token contracts are mocked in backend tests. No live Google, Salesforce or NetSuite account was connected, and no real customer messages or CRM records were processed. Administrators must register/approve OAuth clients and verify their actual account permissions in the deployed app.

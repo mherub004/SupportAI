@@ -74,6 +74,7 @@ def validate_grounding(proposal, documents):
     for citation in proposal.citations:
         doc = docs.get(citation.document_id)
         if (doc is None or not current(doc) or doc.revision != citation.revision
-                or citation.quote not in doc.content):
+                or citation.quote not in doc.content
+                or citation.quote not in getattr(doc, "full_content", doc.content)):
             return False
     return True

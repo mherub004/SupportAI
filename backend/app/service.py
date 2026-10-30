@@ -7,7 +7,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.db import MessageOrigin, Conversation, Document, Job, Message, Send, State, audit, now
+from app.db import Connector, DriveApproval, MessageOrigin, Conversation, Document, Job, Message, Send, State, audit, now
 from app.google import DemoMail, Drive, Gmail
 from app.policy import (SAFETY, classify, current, excluded, safe_response,
                         valid_recipient, validate_grounding)
@@ -87,10 +87,17 @@ def retrieve(session, email, config=None):
     selected = []
     total = 0
     for doc in docs:
-        if len(doc.content) > 40000 or total + len(doc.content) > 60000:
+        from types import SimpleNamespace
+        blocks = [doc.content[index:index + 4000] for index in range(0, len(doc.content), 4000)]
+        ranked = sorted(range(len(blocks)), key=lambda i: len(words & set(re.findall(r"\w{3,}", blocks[i].casefold()))), reverse=True)
+        indexes = sorted(ranked[:4])
+        excerpt = "\n\n".join(blocks[i] for i in indexes)
+        if total + len(excerpt) > 60000:
             continue
-        selected.append(doc)
-        total += len(doc.content)
+        evidence = SimpleNamespace(**{column.name: getattr(doc, column.name) for column in Document.__table__.columns})
+        evidence.full_content, evidence.content = doc.content, excerpt
+        selected.append(evidence)
+        total += len(excerpt)
         if len(selected) == 5:
             break
     return selected
@@ -117,6 +124,9 @@ class Workflow:
                 brand_query = brand_query.where(~Document.id.like("demo-%"))
             brands = list(session.scalars(brand_query)) or ["ABL", "Wallbox"]
             email.language, email.brand, email.risk_tags = classify(email, brands)
+            knowledge_state = session.get(State, "knowledge_sync")
+            if knowledge_state and knowledge_state.value != "current":
+                email.risk_tags = email.risk_tags + ["knowledge_sync_uncertain"]
             if email.language not in self.config.supported_languages:
                 email.risk_tags = email.risk_tags + ["unsupported_language"]
             if any(word in (email.subject + " " + email.body).casefold() for word in self.config.escalation_keywords):
@@ -374,20 +384,45 @@ class Workflow:
     def sync_drive(self):
         if self.config.configured_business and not self.config.drive_folder_id:
             return
-        # Fail closed while fetching. A partial/failed refresh cannot authorize autosend.
+        from app.business import active, decode, digest
+        config_digest = None
+        # Bind the in-flight index to one configuration while marking it uncertain.
         with self.factory() as session:
+            if self.config.configured_business:
+                record = session.scalar(select(Connector).where(Connector.id == "google").with_for_update())
+                fields = decode(record, self.config) if record else {}
+                if not active(session) or not record or any(getattr(self.config, k, None) != v for k, v in fields.items()):
+                    raise Conflict("Google settings changed before sync")
+                config_digest = digest(fields)
             state = session.get(State, "knowledge_sync")
             if state:
                 state.value = "uncertain"
             else:
                 session.add(State(key="knowledge_sync", value="uncertain"))
             session.commit()
-        inventory = Drive(self.config).documents()
         with self.factory() as session:
+            approvals = {a.file_id: {"revision": a.revision, "modified_time": a.modified_time,
+                                    "approved": a.approved, "metadata": a.source_metadata}
+                         for a in session.scalars(select(DriveApproval))}
+        inventory = Drive(self.config, approvals).documents()
+        with self.factory() as session:
+            if config_digest is not None:
+                record = session.scalar(select(Connector).where(Connector.id == "google").with_for_update())
+                if not record or not active(session) or digest(decode(record, self.config)) != config_digest:
+                    raise Conflict("Google settings changed during sync")
+            current_approvals = {a.file_id: {"revision": a.revision, "modified_time": a.modified_time,
+                                           "approved": a.approved, "metadata": a.source_metadata}
+                                 for a in session.scalars(select(DriveApproval).with_for_update())}
+            def unchanged(file_id):
+                return current_approvals.get(file_id) == approvals.get(file_id)
             for doc in session.scalars(select(Document).where(Document.id.like("drive:%"))):
-                doc.approved = False
+                file_id = doc.id.removeprefix("drive:")
+                if unchanged(file_id) or not current_approvals.get(file_id, {}).get("approved", True):
+                    doc.approved = False
             for data in inventory:
-                upsert_document(session, data)
+                file_id = data.id.removeprefix("drive:")
+                if unchanged(file_id) and current_approvals.get(file_id, {}).get("approved", True):
+                    upsert_document(session, data)
             session.get(State, "knowledge_sync").value = "current"
             audit(session, "drive_sync_completed", "knowledge", documents=len(inventory))
             session.commit()

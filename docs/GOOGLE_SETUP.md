@@ -26,7 +26,7 @@ Set `GEMINI_API_KEY` and the approved `GEMINI_MODEL` identifier (default candida
 
 The entire bounded plain-text inbound email is sent to the configured model; there is no full PII anonymizer. Credentials and unrelated headers/attachments are not sent. Production content handling requires your privacy approval and any further redaction rules.
 
-## Approved Drive folder
+## Approved Drive folder (legacy appProperties option)
 
 Set `DRIVE_FOLDER_ID` to the approved folder/Shared Drive folder. Only direct children are ingested. Supported MIME types: Google Docs export to plain text; UTF-8 Markdown/plain text; text-extractable PDF up to 10MB. PDF evidence includes page markers. Scanned PDFs need OCR outside this pilot.
 
@@ -76,3 +76,7 @@ Package registries are needed only for building/installing. Preserve configured 
 Keep auto-send disabled and kill switch enabled. Trigger authenticated `/api/sync/drive`, inspect the registry, then `/api/sync/gmail` and `/api/sync/watch` as appropriate. Confirm real test drafts remain in the original Gmail thread, contain the expected recipient/headers and only approved evidence. Exercise duplicate notifications, missed-history recovery, expired OAuth credentials, human replies, source revocation and uncertain-send reconciliation using test messages.
 
 Automatic sending additionally requires both `AUTO_SEND_ENABLED=true` and `PRODUCTION_APPROVED=true`, a disabled kill switch, a current source with customer URL, no risk/ownership flags, and the category allowlist. These environment flags **record a deployment choice; they are not evidence that business/privacy approval happened**. Never enable them until the plan's real evaluation and go-live gates have been met.
+
+## Preferred guided connection and source approval
+
+The application now provides authorization-code/PKCE account connection and a Drive browser. Configure the administrator client once, use Connect Google account, verify access, then browse/preview/approve exact document versions locally. No appProperties changes are required for UI-managed sources. This works before Gmail activation and resolves the need to paste a manual source before importing Drive knowledge. Follow [INTEGRATIONS.md](INTEGRATIONS.md) for the current workflow.

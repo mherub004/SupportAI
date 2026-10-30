@@ -10,7 +10,7 @@ from sqlalchemy import func, select, text
 
 from app.config import settings
 from app.business import runtime, install_routes
-from app.db import MessageOrigin, Audit, Conversation, Document, Job, Message, Send, State, audit, database, now
+from app.db import DriveApproval, MessageOrigin, Audit, Conversation, Document, Job, Message, Send, State, audit, database, now
 from app.schemas import ControlsInput, EmailInput, KnowledgeInput, OwnershipInput, ReviewInput
 from app.service import Conflict, Workflow, enqueue, ingest, initialize, upsert_document
 
@@ -177,7 +177,10 @@ def create_app(config=None, db=None, workflow=None):
     @app.post("/api/knowledge/{document_id}/retire", dependencies=secured)
     def retire_knowledge(document_id: str, session=Depends(session_dep)):
         if document_id.startswith("drive:"):
-            raise Conflict("Change approval in Drive and synchronize the source")
+            approval = session.get(DriveApproval, document_id.removeprefix("drive:"))
+            if not approval:
+                raise Conflict("Change legacy source approval in Drive and synchronize it")
+            approval.approved = False
         document = session.get(Document, document_id)
         if not document:
             raise HTTPException(404, "Knowledge source not found")
@@ -244,4 +247,10 @@ def create_app(config=None, db=None, workflow=None):
         return {"status": "queued"}
 
     install_routes(app, config, factory, operator)
+    from app.oauth import install_routes as install_oauth
+    from app.drive_setup import install_routes as install_drive
+    from app.crm_routes import install_routes as install_crm
+    install_oauth(app, config, factory, operator)
+    install_drive(app, config, factory, operator)
+    install_crm(app, config, factory, operator)
     return app
