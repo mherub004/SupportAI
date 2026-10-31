@@ -9,7 +9,7 @@ services:
     environment:
       SSL_CERT_FILE: /run/cloud-ca.pem
       REQUESTS_CA_BUNDLE: /run/cloud-ca.pem
-  api:
+  api: &cloud_backend
     build:
       context: ./backend
       secrets: [proxy_ca]
@@ -36,6 +36,12 @@ services:
     volumes: ["/etc/ssl/certs/ca-certificates.crt:/run/cloud-ca.pem:ro"]
     environment:
       NODE_EXTRA_CA_CERTS: /run/cloud-ca.pem
+  test-init:
+    <<: *cloud_backend
+  test-api:
+    <<: *cloud_backend
+  test-worker:
+    <<: *cloud_backend
 secrets:
   proxy_ca:
     file: /etc/ssl/certs/ca-certificates.crt

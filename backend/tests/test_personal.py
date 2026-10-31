@@ -12,6 +12,7 @@ from app.service import ingest
 
 
 def host(base):
+    base.workspace = "personal_test"
     base.public_app_url = "https://support.example.com"
     base.google_client_id = "synthetic-host-client"
     base.google_client_secret = "synthetic-host-secret"
@@ -57,6 +58,7 @@ def test_personal_connection_infers_identity_and_stays_paused_until_consent(setu
 
 def test_personal_requires_host_client_and_does_not_create_fake_connection(setup):
     base, _, factory, _ = setup
+    base.workspace = "personal_test"
     base.google_client_id = base.google_client_secret = ""
     with pytest.raises(ValueError, match="host"):
         begin(base, factory)

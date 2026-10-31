@@ -17,7 +17,7 @@ from app.service import Conflict, Workflow, enqueue, ingest, initialize, upsert_
 
 def create_app(config=None, db=None, workflow=None):
     config = config or settings()
-    engine, factory = db or database(config.database_url)
+    engine, factory = db or database(config.database_url, config.workspace)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -256,3 +256,8 @@ def create_app(config=None, db=None, workflow=None):
     install_crm(app, config, factory, operator)
     install_personal(app, config, factory, operator)
     return app
+
+
+def create_test_app():
+    from app.workspaces import personal_config
+    return create_app(personal_config(settings()))

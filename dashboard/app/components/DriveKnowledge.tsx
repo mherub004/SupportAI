@@ -1,10 +1,11 @@
 "use client";
+import { workspaceHeaders } from "../../lib/workspace-client";
 import { FormEvent, useState } from "react";
 
 type FileRow = { id: string; title: string; mime_type: string; revision: string; modified_time: string; approved: boolean };
 type Preview = FileRow & { content: string };
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(`/api/backend/${path}`, { method, cache: "no-store", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  const response = await fetch(`/api/backend/${path}`, { method, cache: "no-store", headers: { ...workspaceHeaders(), "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || "Drive request failed");
   return result;

@@ -1,4 +1,5 @@
 "use client";
+import { workspaceHeaders } from "../lib/workspace-client";
 import PersonalSetup from "./components/PersonalSetup";
 import CrmContext from "./components/CrmContext";
 import BusinessSetup from "./components/BusinessSetup";
@@ -11,7 +12,7 @@ type Knowledge = { id: string; title: string; revision: string; brand: string; m
 type Event = { id: number; event: string; entity_id: string; actor: string; created_at: string; details: Record<string, unknown> };
 type Job = { id: string; kind: string; status: string; attempts: number; error: string };
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const result = await fetch(`/api/backend/${path}`, { method, headers: { "Content-Type": "application/json" },
+  const result = await fetch(`/api/backend/${path}`, { method, headers: { ...workspaceHeaders(), "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body), cache: "no-store" });
   const data = await result.json();
   if (!result.ok) throw new Error(data.detail || "Request failed");
@@ -24,7 +25,9 @@ export default function Dashboard() {
   const previousFocus = useRef<HTMLElement | null>(null);
   const [authenticated, setAuthenticated] = useState(false);
   const [token, setToken] = useState("");
-  const [tab, setTab] = useState("Personal setup");
+  const [workspace, setWorkspace] = useState<"company" | "test">("company");
+  const [testAvailable, setTestAvailable] = useState(false);
+  const [tab, setTab] = useState("Business setup");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [messages, setMessages] = useState<Summary[]>([]);
   const [documents, setDocuments] = useState<Knowledge[]>([]);
@@ -41,12 +44,18 @@ export default function Dashboard() {
     const [o, m, d, e, j] = await Promise.all([api<Overview>("overview"), api<Summary[]>("messages"), api<Knowledge[]>("knowledge"), api<Event[]>("audit"), api<Job[]>("jobs")]);
     setOverview(o); setMessages(m); setDocuments(d); setEvents(e); setJobs(j); setAuthenticated(true);
   }, []);
-  useEffect(() => { refresh().catch(() => setAuthenticated(false)); }, [refresh]);
+  useEffect(() => {
+    fetch("/api/workspace", { headers: workspaceHeaders(), cache: "no-store" }).then(r => r.json()).then(result => {
+      setWorkspace(result.workspace); setTestAvailable(result.test_available);
+      setTab(result.workspace === "test" ? "Personal setup" : "Business setup");
+      return refresh();
+    }).catch(() => setAuthenticated(false));
+  }, [refresh]);
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     if (["google", "salesforce", "netsuite"].includes(query.get("connection") || "")) {
       setNotice(query.get("result") === "connected" ? "Account connected securely. Verify access and complete your setup." : "Account authorization was not completed. Check provider configuration and selected account, then reconnect.");
-      window.history.replaceState({}, "", window.location.pathname);
+      window.history.replaceState({}, "", window.location.pathname + (query.get("workspace") === "test" ? "?workspace=test" : ""));
     }
   }, []);
   useEffect(() => {
@@ -71,10 +80,18 @@ export default function Dashboard() {
     catch (e) { setError(e instanceof Error ? e.message : "Operation failed"); }
     finally { setBusy(false); }
   };
+  const switchWorkspace = async (target: "company" | "test") => {
+    setBusy(true); setError("");
+    try {
+      const result = await fetch("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace: target }) });
+      const data = await result.json(); if (!result.ok) throw new Error(data.detail || "Cannot switch workspace");
+      window.location.assign(target === "test" ? "/?workspace=test" : "/");
+    } catch (e) { setError(e instanceof Error ? e.message : "Switch failed"); setBusy(false); }
+  };
   const login = async (event: FormEvent) => {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const result = await fetch("/api/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
+      const result = await fetch("/api/session", { method: "POST", headers: { ...workspaceHeaders(), "Content-Type": "application/json" }, body: JSON.stringify({ token }) });
       if (!result.ok) throw new Error("Invalid operator token");
       setToken(""); await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Sign in failed"); }
@@ -83,8 +100,8 @@ export default function Dashboard() {
   if (!authenticated) return <main className="login-shell"><div className="login-card"><div className="logo">S<span>f</span></div><p className="eyebrow">SUPPORT OPERATIONS</p><h1>Welcome to<br/>SupportFlow AI.</h1><p>Review grounded replies. Keep people in control.</p><form onSubmit={login}><label htmlFor="token">Operator access token</label><input id="token" type="password" value={token} onChange={e => setToken(e.target.value)} required autoComplete="current-password"/><button disabled={busy} className="primary">{busy ? "Connecting…" : "Open workspace →"}</button></form>{error && <p role="alert" className="error">{error}</p>}<small>Internal pilot · Use the token configured by your administrator.</small></div><div className="login-art"><div className="orbit one"/><div className="orbit two"/><div className="art-copy"><span className="dot"/> KNOWLEDGE → CONFIDENCE<h2>Good support<br/>starts with<br/><em>a trusted source.</em></h2><p>Every response has a source.<br/>Every decision stays accountable.</p></div></div></main>;
   const total = Object.values(overview?.counts || {}).reduce((sum, n) => sum + n, 0);
   const attention = messages.filter(m => m.disposition === "escalate").length;
-  return <div className="workspace"><aside><a className="wordmark" href="/">SupportFlow<span>AI</span></a><p className="sidebar-label">WORKSPACE</p><nav aria-label="Workspace">{["Personal setup", "Inbox", "Knowledge", "Activity", "Operations", "Business setup"].map((name, i) => <button key={name} className={tab === name ? "nav active" : "nav"} onClick={() => setTab(name)}><span aria-hidden>{["◇", "▤", "◈", "◷", "⚙", "◇"][i]}</span>{name}{name === "Inbox" && <b>{messages.length}</b>}</button>)}</nav><div className="sidebar-bottom"><span className="tag">{overview?.mode === "demo" ? "SYNTHETIC DEMO" : "LIVE DRAFTS"}</span><p>{overview?.company_name}<br/>{overview?.mailbox}</p><button className="text-button" onClick={async () => { await fetch("/api/session", { method: "DELETE" }); setAuthenticated(false); setSelected(null); }}>Sign out ↗</button></div></aside><main className="main"><header><div><p className="eyebrow">SUPPORT OPERATIONS / {tab.toUpperCase()}</p><h1>{tab === "Personal setup" ? "Try your personal inbox" : tab === "Inbox" ? "Your review workspace" : tab === "Knowledge" ? "Knowledge you can trace" : tab === "Activity" ? "Every decision, recorded" : tab === "Business setup" ? "Set up your business" : "Operational controls"}</h1><p className="muted">{tab === "Inbox" ? "A clear view of conversations that need your attention." : "Approved evidence and human oversight at every step."}</p></div><button onClick={() => action(refresh, "Workspace refreshed", false)} disabled={busy}>↻ Refresh</button></header>{overview?.mode === "setup" && <div className="banner"><strong>Setup in progress</strong><span>Complete your setup to activate draft-only processing.</span></div>}{overview?.mode === "demo" && <div className="banner"><strong>Demo workspace</strong><span>Synthetic customers and documents. No real email is sent.</span></div>}{error && <div role="alert" className="error alert">{error}</div>}{notice && <div role="status" className="notice alert">{notice}</div>}<section className="stats" aria-label="Workspace metrics"><div><span>Conversations</span><strong>{total}</strong><small>In this workspace</small></div><div><span>Ready for review</span><strong>{overview?.counts.draft || 0}</strong><small>Drafts prepared</small></div><div><span>Needs a specialist</span><strong className="orange">{attention}</strong><small>Escalated for human care</small></div><div><span>Sending</span><strong className="control-status">{overview?.kill_switch ? "Paused" : "Enabled"}</strong><small>{overview?.auto_send_enabled ? "Limited automatic mode" : "Operator approval required"}</small></div></section>
-  {tab === "Personal setup" && <PersonalSetup onChanged={refresh} openBusiness={() => setTab("Business setup")}/>}
+  return <div className="workspace"><aside><a className="wordmark" href="/">SupportFlow<span>AI</span></a><div className="workspace-switch"><p className="sidebar-label">ENVIRONMENT</p><button className={workspace === "company" ? "nav active" : "nav"} disabled={busy} onClick={() => void switchWorkspace("company")}>Company workspace</button><button className={workspace === "test" ? "nav active" : "nav"} disabled={busy || !testAvailable} onClick={() => void switchWorkspace("test")}>Personal test environment</button></div><p className="sidebar-label">WORKSPACE</p><nav aria-label="Workspace">{(workspace === "test" ? ["Personal setup", "Inbox", "Knowledge", "Activity", "Operations"] : ["Inbox", "Knowledge", "Activity", "Operations", "Business setup"]).map((name, i) => <button key={name} className={tab === name ? "nav active" : "nav"} onClick={() => setTab(name)}><span aria-hidden>{["◇", "▤", "◈", "◷", "⚙", "◇"][i]}</span>{name}{name === "Inbox" && <b>{messages.length}</b>}</button>)}</nav><div className="sidebar-bottom"><span className="tag">{overview?.mode === "demo" ? "SYNTHETIC DEMO" : "LIVE DRAFTS"}</span><p>{overview?.company_name}<br/>{overview?.mailbox}</p><button className="text-button" onClick={async () => { await fetch("/api/session", { method: "DELETE" }); setAuthenticated(false); setSelected(null); }}>Sign out ↗</button></div></aside><main className="main"><header><div><p className="eyebrow">SUPPORT OPERATIONS / {tab.toUpperCase()}</p><h1>{tab === "Personal setup" ? "Try your personal inbox" : tab === "Inbox" ? "Your review workspace" : tab === "Knowledge" ? "Knowledge you can trace" : tab === "Activity" ? "Every decision, recorded" : tab === "Business setup" ? "Set up your business" : "Operational controls"}</h1><p className="muted">{tab === "Inbox" ? "A clear view of conversations that need your attention." : "Approved evidence and human oversight at every step."}</p></div><button onClick={() => action(refresh, "Workspace refreshed", false)} disabled={busy}>↻ Refresh</button></header>{workspace === "test" && <div className="banner"><strong>Personal test environment</strong><span>Separate mailbox, credentials, knowledge and jobs. Company settings stay in the company workspace. Drafts only.</span></div>}{overview?.mode === "setup" && <div className="banner"><strong>Setup in progress</strong><span>Complete your setup to activate draft-only processing.</span></div>}{overview?.mode === "demo" && <div className="banner"><strong>Demo workspace</strong><span>Synthetic customers and documents. No real email is sent.</span></div>}{error && <div role="alert" className="error alert">{error}</div>}{notice && <div role="status" className="notice alert">{notice}</div>}<section className="stats" aria-label="Workspace metrics"><div><span>Conversations</span><strong>{total}</strong><small>In this workspace</small></div><div><span>Ready for review</span><strong>{overview?.counts.draft || 0}</strong><small>Drafts prepared</small></div><div><span>Needs a specialist</span><strong className="orange">{attention}</strong><small>Escalated for human care</small></div><div><span>Sending</span><strong className="control-status">{overview?.kill_switch ? "Paused" : "Enabled"}</strong><small>{overview?.auto_send_enabled ? "Limited automatic mode" : "Operator approval required"}</small></div></section>
+  {tab === "Personal setup" && <PersonalSetup onChanged={refresh} openBusiness={() => void switchWorkspace("company")}/>}
   {tab === "Business setup" && <BusinessSetup onChanged={refresh}/> }
   {tab === "Inbox" && <section className="panel"><div className="panel-heading"><div><h2>Conversations <span className="pill">{messages.length}</span></h2><p className="muted">Newest first · Select a conversation to review its evidence.</p></div><label className="search"><span className="sr-only">Search conversations</span><input placeholder="Search conversations…" value={filter} onChange={e => setFilter(e.target.value)}/></label></div><div className="table-wrap"><table><thead><tr><th>Conversation</th><th>Product</th><th>Decision</th><th>Status</th><th>Received</th></tr></thead><tbody>{messages.filter(m => `${m.subject} ${m.sender}`.toLowerCase().includes(filter.toLowerCase())).map(m => <tr key={m.id}><td><button className="subject" onClick={() => action(() => open(m.id), "", false)}><span className="avatar">{m.sender.slice(0, 1).toUpperCase()}</span><span><strong>{m.subject || "(retained ID only)"}</strong><small>{m.sender}</small></span></button></td><td>{m.brand}<small>{m.language.toUpperCase()}</small></td><td><span className={`badge ${m.disposition}`}>{m.disposition}</span></td><td>{m.status.replaceAll("_", " ")}</td><td className="date">{stamp(m.created_at)}</td></tr>)}</tbody></table>{!messages.length && <div className="empty"><h3>Your inbox is clear</h3><p>Seed synthetic demo messages or configure the approved Gmail connector.</p></div>}</div></section>}
   {tab === "Knowledge" && <section className="panel"><div className="panel-heading"><div><h2>Source registry</h2><p className="muted">Only current, approved, customer-safe documents are eligible for retrieval.</p></div>{overview?.mode === "google" && overview.drive_connected && <button disabled={busy} onClick={() => action(() => api("sync/drive", "POST"), "Knowledge sync queued", false)}>Sync Drive</button>}</div><div className="knowledge-grid">{documents.map(d => <article className="document" key={d.id}><span className="document-icon">▧</span><span className={`badge ${d.approved ? "eligible" : "review"}`}>{d.approved ? "Approved" : "Not approved"}</span><h3>{d.title}</h3><p>{d.brand} / {d.model} / {d.language.toUpperCase()}</p><dl><dt>Revision</dt><dd>{d.revision}</dd><dt>Owner</dt><dd>{d.owner}</dd><dt>Visibility</dt><dd>{d.visibility}</dd></dl><a href={safeLink(d.url)} target="_blank" rel="noreferrer">Open original ↗</a>{d.visibility !== "retired" && <button className="text-button" style={{display: "block", marginTop: 16}} disabled={busy} onClick={() => { if (window.confirm("Retire this knowledge source? Existing replies using it will be blocked from sending.")) void action(() => api(`knowledge/${encodeURIComponent(d.id)}/retire`, "POST"), "Knowledge source retired", false); }}>Retire source</button>}</article>)}</div>{!documents.length && <div className="empty">No documents registered. Import approved sources using the API or Drive sync.</div>}</section>}

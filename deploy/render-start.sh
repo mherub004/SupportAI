@@ -17,6 +17,7 @@ print(url)
 PY
 )"
 export API_URL=http://127.0.0.1:8000
+export TEST_API_URL=http://127.0.0.1:8001
 export COOKIE_SECURE=true
 if [[ -n "${PUBLIC_APP_URL:-}" ]]; then
   export DASHBOARD_ORIGIN="$PUBLIC_APP_URL"
@@ -24,22 +25,27 @@ elif [[ -z "${DASHBOARD_ORIGIN:-}" && -n "${RENDER_EXTERNAL_URL:-}" ]]; then
   export DASHBOARD_ORIGIN="$RENDER_EXTERNAL_URL"
 fi
 python -m app.cli init-db
+python -m app.cli init-db --personal-test
 if [[ "${CONNECTOR_MODE:-demo}" == demo ]]; then python -m app.cli seed-demo; fi
 uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 &
 api_pid=$!
 python -m app.worker &
 worker_pid=$!
+uvicorn app.main:create_test_app --factory --host 127.0.0.1 --port 8001 &
+test_api_pid=$!
+python -m app.worker --personal-test &
+test_worker_pid=$!
 cd /app/dashboard
 HOSTNAME=0.0.0.0 PORT="${PORT:-3000}" node server.js &
 dashboard_pid=$!
 cleanup() {
-  kill "$api_pid" "$worker_pid" "$dashboard_pid" 2>/dev/null || true
+  kill "$api_pid" "$worker_pid" "$test_api_pid" "$test_worker_pid" "$dashboard_pid" 2>/dev/null || true
   wait || true
 }
 trap cleanup EXIT INT TERM
 # If any component dies, exit so the hosting platform restarts the whole service.
 set +e
-wait -n "$api_pid" "$worker_pid" "$dashboard_pid"
+wait -n "$api_pid" "$worker_pid" "$test_api_pid" "$test_worker_pid" "$dashboard_pid"
 result=$?
 set -e
 if [[ "$result" == 0 ]]; then result=1; fi

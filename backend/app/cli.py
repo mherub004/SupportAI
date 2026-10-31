@@ -46,9 +46,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("command", choices=["init-db", "seed-demo", "purge", "reconcile"])
     parser.add_argument("--message-id")
+    parser.add_argument("--personal-test", action="store_true")
     args = parser.parse_args()
     config = settings()
-    engine, factory = database(config.database_url)
+    if args.personal_test:
+        from app.workspaces import personal_config
+        config = personal_config(config)
+    engine, factory = database(config.database_url, config.workspace)
     initialize(engine, factory)
     if args.command == "seed-demo":
         seed(factory, config)

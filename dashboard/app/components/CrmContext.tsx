@@ -1,4 +1,5 @@
 "use client";
+import { workspaceHeaders } from "../../lib/workspace-client";
 import { useState } from "react";
 type Result = { providers: Record<string, { status: string; records: { record_id: string; display_name: string; organization: string }[] }>; warning: string };
 export default function CrmContext({ messageId, enabled }: { messageId: string; enabled: boolean }) {
@@ -8,7 +9,7 @@ export default function CrmContext({ messageId, enabled }: { messageId: string; 
   async function load() {
     setBusy(true); setError(""); setResult(null);
     try {
-      const response = await fetch(`/api/backend/messages/${encodeURIComponent(messageId)}/crm-context`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const response = await fetch(`/api/backend/messages/${encodeURIComponent(messageId)}/crm-context`, { method: "POST", headers: { ...workspaceHeaders(), "Content-Type": "application/json" }, body: "{}" });
       const data = await response.json(); if (!response.ok) throw new Error(data.detail || "CRM lookup failed"); setResult(data);
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to load context"); }
     finally { setBusy(false); }

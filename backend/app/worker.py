@@ -83,14 +83,18 @@ def schedule(factory, config):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--personal-test", action="store_true")
     args = parser.parse_args()
     config = settings()
-    engine, factory = database(config.database_url)
+    if args.personal_test:
+        from app.workspaces import personal_config
+        config = personal_config(config)
+    engine, factory = database(config.database_url, config.workspace)
     initialize(engine, factory)
     logging.basicConfig(level=logging.INFO)
     while True:
         effective = runtime(config, factory)
-        if effective.configured_business and not effective.business_active:
+        if (effective.configured_business or effective.workspace == "personal_test") and not effective.business_active:
             if args.once:
                 break
             time.sleep(2)

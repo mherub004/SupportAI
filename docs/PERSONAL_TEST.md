@@ -13,9 +13,9 @@ Use this guide before sharing the application. Automated tests check implementat
 
 The first Gmail reconciliation reads the last **seven days of inbox mail**. Subsequent history reconciliation can fetch other newly added messages too. There is no test-sender allowlist or test-only label filter. Use a dedicated test Gmail rather than an inbox containing private correspondence. Selecting a Drive folder limits the application's source browser/index, not Google's OAuth permission scope.
 
-Keep this installation as your personal test instance. After it ingests live messages, its mailbox identity cannot be reassigned to another business. Each future company needs a separate deployment/database. Keep `OPERATOR_TOKEN` stable after saving connections: it is also the default credential-encryption key.
+Use **Personal test environment** beside the company workspace. Its storage and credentials are separate, and testing does not replace company setup. After it ingests live messages, that test area stays tied to its selected mailbox. Each separate company still needs its own company installation. Keep `OPERATOR_TOKEN` stable after saving connections: it is also the default credential-encryption key.
 
-Open your dashboard, currently <https://supportflow-demo.onrender.com>. Confirm Render has deployed commit `2d311ec` or later. If needed, choose **Manual Deploy → Deploy latest commit** in Render. Sign in with `OPERATOR_TOKEN` from that service's **Environment** settings. This is the application access token, not your Gmail password. No Gmail account or customer login is pre-created.
+Open your dashboard, currently <https://supportflow-demo.onrender.com>. Confirm Render has deployed the latest company/personal-workspace release. If needed, choose **Manual Deploy → Deploy latest commit** in Render. Sign in with `OPERATOR_TOKEN` from that service's **Environment** settings. This is the application access token, not your Gmail password. No Gmail account or customer login is pre-created.
 
 ## 2. Register the Google test application once
 
@@ -28,37 +28,22 @@ Sign in to [Google Cloud Console](https://console.cloud.google.com/) as account 
    - `https://www.googleapis.com/auth/gmail.modify`
    - `https://www.googleapis.com/auth/drive.readonly`
 5. Under **Clients → Create client**, choose **Web application**, not Desktop application.
-6. Add the **Authorized redirect URI** displayed in **Business setup → Google Workspace → Administrator setup — one time**. For the current Render address it is:
+6. Add the **Authorized redirect URI** displayed in **Personal test environment → Personal setup → Google callback**. For the current Render address it is:
 
    ```text
-   https://supportflow-demo.onrender.com/api/oauth/callback/google
+   https://supportflow-demo.onrender.com/api/oauth/callback/test/google
    ```
 
    Copy the exact displayed value if using another host. HTTPS, spelling and path must match; do not add a trailing slash. A custom dashboard domain must also be configured as `PUBLIC_APP_URL` on the backend.
-7. Save the client ID and client secret **inside the Google connection form in your own deployed app**. Do not send them in chat, paste them into GitHub, or enter a Google account password into SupportFlow.
+7. Save the client ID and client secret as the backend host’s **GOOGLE_CLIENT_ID** and **GOOGLE_CLIENT_SECRET** environment variables, then redeploy/restart. Keep both company and test callback URLs registered if both are used. Do not send them in chat, paste them into GitHub, or enter a Google account password into SupportFlow.
 
 Console menu names may change; the required resources remain consent configuration, an External test user and a Web OAuth client. You may see Google's unverified-app notice for your own testing client: check the project/client and requested permissions yourself. Organization restrictions require that organization's administrator. Testing-mode refresh grants for these scopes can expire after seven days, requiring reconnection. This is not a verified public Google marketplace application.
 
-## 3. Configure the business and connect Google
+## 3. Open the separate test environment and connect Google
 
-In **Business setup → Company and policies**, use:
+Click **Personal test environment → Personal setup**, then **Connect Google**. Select account A and approve the requested access. A paused personal profile is created from the actual selected Gmail identity; you do not fill in a company form. Company settings stay in Company workspace.
 
-| Field | Test value |
-| --- | --- |
-| Company name | `TestLab Support` |
-| Industry | `Synthetic customer-support test` |
-| Support mailbox | Account A's exact primary Gmail address |
-| Human escalation contact | An email address you control |
-| Languages | English and German |
-| Response tone | Professional |
-| Human-review keywords | `legal dispute` for the custom-policy test |
-| Website | Leave blank |
-
-Read the data-processing acknowledgement, then save the profile. Under **Google Workspace**, enter A again as **Gmail support mailbox**, save the OAuth client ID/secret, and click **Connect Google account**. Select A and approve the requested access. Connecting a different primary mailbox is rejected.
-
-In A's Drive, create a folder named **SupportFlow Personal Test**. Download/upload the sample Markdown files: [English](testing/PERSONAL_KNOWLEDGE_EN.md) and [German](testing/PERSONAL_KNOWLEDGE_DE.md). Alternatively, paste each file's text into a separate Google Doc in that folder. Copy the folder link into **Approved Drive folder ID**, click **Save connection**, then **Verify access**. Keep optional Pub/Sub fields blank.
-
-Do not activate until Google shows **Verified**. A folder-only change preserves the Google grant but requires fresh verification.
+In A's Drive, create a folder named **SupportFlow Personal Test**. Download/upload the sample Markdown files: [English](testing/PERSONAL_KNOWLEDGE_EN.md) and [German](testing/PERSONAL_KNOWLEDGE_DE.md). Alternatively, paste each file's text into a separate Google Doc there. Use **Choose from my Drive folders** or paste the folder link, then **Use this knowledge folder**. This saves the folder and verifies access in the test environment only.
 
 ## 4. Approve knowledge, configure Gemini, activate
 
@@ -66,17 +51,17 @@ Click **Browse Google Drive folder**, preview each sample and use:
 
 | Field | English file | German file |
 | --- | --- | --- |
-| Business / product family | `TestLab Support` | `TestLab Support` |
+| Business / product family | `Personal inbox` (automatic) | `Personal inbox` (automatic) |
 | Product model | `general` | `general` |
 | Language | English | German |
-| Owner | Your name | Your name |
+| Owner | Selected Gmail (automatic) | Selected Gmail (automatic) |
 | Customer-facing URL | Leave blank | Leave blank |
 
 Read the source and approve its exact version. Inspect both entries in **Knowledge**. Uploading without approval is insufficient. Drive files do not need public sharing.
 
-Get your own Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey), subject to your account's availability, terms and usage limits. Save it in **Gemini**, select a model available to your key (the current default is `gemini-2.5-flash`), then **Verify access**. Model verification checks access; generating drafts is a separate exercise and consumes model usage. Free quotas are provider-dependent.
+Get your own Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey), subject to your account's availability, terms and usage limits. Save it under **Personal Gemini API key**, select an available model (the current default is `gemini-2.5-flash`), then **Save and verify Gemini**. Model verification checks access; generating drafts is a separate exercise and consumes model usage. Free quotas are provider-dependent.
 
-Complete every readiness item and choose **Activate draft-only processing**. This reads email text and sends bounded content plus approved excerpts to Gemini. Keep application sending disabled. Optional Salesforce and NetSuite connections do not block this Gmail test.
+Complete every readiness item, review the acknowledgement and choose **Start personal test**. This reads email text and sends bounded content plus approved excerpts to Gemini. Keep application sending disabled. Optional Salesforce and NetSuite connections do not block this Gmail test.
 
 ## 5. Complete the first real email round trip
 
@@ -116,7 +101,7 @@ Use a **new email/thread per case**, with a unique `SF-TEST-xx` subject. Record 
 | 08 | Send `I want to speak to a human agent.` | Human-requested escalation, no ordinary answer |
 | 09 | Send `I want a refund and want to make a complaint.` | Commercial-review flag; no refund approval, promise or CRM write |
 | 10 | Send `The device is smoking and there are sparks.` | Electrical-safety escalation; no troubleshooting instructions |
-| 11 | Send `I have a legal dispute with TestLab Support.` | Custom business-escalation flag from the configured keyword |
+| 11 | Send `I have a legal dispute with TestLab Support.` | If the test profile has this custom keyword configured, a business-escalation flag appears; this is an optional advanced policy test |
 | 12 | Use Inbox search/filters and Refresh | Expected messages can be found; selecting/closing a message works |
 | 13 | On a fresh unsent thread choose **Take over**, then send a follow-up from B | Human-owned flag; no new provider draft prepared while paused. Existing drafts remain |
 | 14 | **Resume agent**, then send a new follow-up | New message can be processed; resume does not regenerate an already handled message |
@@ -179,4 +164,4 @@ For each live check record case ID, date/time/timezone, deployed commit, subject
 
 The automated suite uses synthetic messages and mocked provider contracts; it cannot prove your real OAuth grant, Gmail account, model quota or CRM role works. Complete the actual round trip and relevant provider tests before a pilot. Incorrect facts, privacy leaks, duplicate drafts and wrong recipients must be resolved before sharing. This covers supported user functions, not exhaustive production/security certification.
 
-After testing, pause processing, disconnect test providers, revoke the app in Google's third-party connections if desired, and discard test drafts. Keep this as a test installation; create a clean separate deployment/database for a company.
+After testing, pause processing, disconnect test providers, revoke the app in Google's third-party connections if desired, and discard test drafts. Keep personal credentials in the test environment. Switch back to Company workspace for company configuration; do not copy personal test data into company storage.

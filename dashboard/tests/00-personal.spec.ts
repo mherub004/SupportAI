@@ -4,14 +4,15 @@ import path from "node:path";
 const token = fs.readFileSync(path.resolve(__dirname, "../../.env"), "utf8").split("\n").find(line => line.startsWith("OPERATOR_TOKEN="))!.slice("OPERATOR_TOKEN=".length);
 
 test("personal setup is the entry point and explains missing host authorization", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?workspace=test");
   await page.getByLabel("Operator access token").fill(token);
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(page.getByRole("heading", { name: "Try your personal inbox" })).toBeVisible();
   await expect(page.getByText("Google sign-in needs hosting setup", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect Google", exact: true })).toBeDisabled();
   await expect(page.getByLabel("Google OAuth client secret")).toHaveCount(0);
-  await page.getByRole("button", { name: "Open host configuration" }).click();
+  await expect(page.getByLabel("Personal test Google callback")).toHaveValue(/\/api\/oauth\/callback\/test\/google$/);
+  await page.getByRole("button", { name: "Company workspace", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
 });
 
@@ -51,7 +52,7 @@ test("personal user chooses approved knowledge and a key before explicitly start
     } else return route.continue();
     await route.fulfill({ json: body });
   });
-  await page.goto("/");
+  await page.goto("/?workspace=test");
   await page.getByLabel("Operator access token").fill(token);
   await page.getByRole("button", { name: "Open workspace" }).click();
   await expect(page.getByText("Selected account: personal@example.com")).toBeVisible();
@@ -75,13 +76,13 @@ test("personal user chooses approved knowledge and a key before explicitly start
 
 for (const provider of ["salesforce", "netsuite"]) {
   test(`personal ${provider} button starts a browser-bound PKCE sign-in`, async ({ page, context }) => {
-    await page.goto("/");
+    await page.goto("/?workspace=test");
     await page.getByLabel("Operator access token").fill(token);
     await page.getByRole("button", { name: "Open workspace" }).click();
     const origin = new URL(page.url()).origin;
     const fields: Record<string, string> = { [provider + "_client_id"]: "synthetic-client", [provider + "_client_secret"]: "synthetic-secret" };
     if (provider === "netsuite") fields.netsuite_account_id = "123456_SB1";
-    const saved = await page.request.put(`${origin}/api/backend/business/connectors/${provider}`, { headers: { Origin: origin }, data: { fields } });
+    const saved = await page.request.put(`${origin}/api/backend/business/connectors/${provider}`, { headers: { Origin: origin, "X-SupportFlow-Workspace": "test" }, data: { fields } });
     expect(saved.ok()).toBe(true);
     await page.reload();
     await page.getByText("Optional: connect Salesforce or NetSuite", { exact: true }).click();
@@ -94,11 +95,11 @@ for (const provider of ["salesforce", "netsuite"]) {
     await page.getByRole("button", { name: `Connect ${name}`, exact: true }).click();
     await expect(page.getByRole("heading", { name: "Mock CRM authorization" })).toBeVisible();
     expect(authorization?.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(authorization?.searchParams.get("redirect_uri")).toBe(`${origin}/api/oauth/callback/${provider}`);
-    const binding = (await context.cookies(`${origin}/api/oauth/callback/${provider}`)).find(cookie => cookie.name === `sf_oauth_${provider}`);
+    expect(authorization?.searchParams.get("redirect_uri")).toBe(`${origin}/api/oauth/callback/test/${provider}`);
+    const binding = (await context.cookies(`${origin}/api/oauth/callback/test/${provider}`)).find(cookie => cookie.name === `sf_oauth_test_${provider}`);
     expect(binding?.httpOnly).toBe(true);
-    await page.goto(`${origin}/api/oauth/callback/${provider}?state=${"forged".repeat(8)}&code=invalid`);
+    await page.goto(`${origin}/api/oauth/callback/test/${provider}?state=${"forged".repeat(8)}&code=invalid`);
     await expect(page.getByRole("status")).toContainText("authorization was not completed");
-    expect((await context.cookies(`${origin}/api/oauth/callback/${provider}`)).some(cookie => cookie.name === `sf_oauth_${provider}`)).toBe(false);
+    expect((await context.cookies(`${origin}/api/oauth/callback/test/${provider}`)).some(cookie => cookie.name === `sf_oauth_test_${provider}`)).toBe(false);
   });
 }

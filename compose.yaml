@@ -63,6 +63,7 @@ services:
     env_file: .env
     environment:
       API_URL: http://api:8000
+      TEST_API_URL: http://test-api:8001
     ports:
       - 127.0.0.1:3000:3000
     depends_on:
@@ -74,5 +75,28 @@ services:
       timeout: 5s
       retries: 10
     restart: unless-stopped
+  test-init:
+    <<: *backend
+    command: [python, -m, app.cli, init-db, --personal-test]
+    restart: "no"
+  test-api:
+    <<: *backend
+    command: [uvicorn, app.main:create_test_app, --factory, --host, 0.0.0.0, --port, "8001"]
+    depends_on:
+      test-init:
+        condition: service_completed_successfully
+    ports:
+      - 127.0.0.1:8001:8001
+    healthcheck:
+      test: [CMD, python, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8001/health")']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  test-worker:
+    <<: *backend
+    command: [python, -m, app.worker, --personal-test]
+    depends_on:
+      test-api:
+        condition: service_healthy
 volumes:
   database:

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sameOrigin } from "../../../../lib/origin";
+import { backendFor } from "../../../../lib/workspace";
 
 type Context = { params: Promise<{ path: string[] }> };
 async function proxy(request: NextRequest, context: Context) {
@@ -12,7 +13,9 @@ async function proxy(request: NextRequest, context: Context) {
   if (path.some(p => !/^[a-zA-Z0-9_:@.\-]+$/.test(p))) {
     return NextResponse.json({ detail: "Invalid path" }, { status: 400 });
   }
-  const target = `${process.env.API_URL || "http://127.0.0.1:8000"}/api/${path.map(encodeURIComponent).join("/")}`;
+  const backend = backendFor(request);
+  if (!backend) return NextResponse.json({ detail: "Personal test backend unavailable" }, { status: 503 });
+  const target = `${backend}/api/${path.map(encodeURIComponent).join("/")}`;
   try {
     const response = await fetch(target, { method: request.method,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

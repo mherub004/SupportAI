@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     escalation_keywords: list[str] = []
     supported_languages: list[str] = ["en", "de"]
     database_url: str = "sqlite:///./supportflow.db"
+    workspace: Literal["company", "personal_test"] = "company"
+    personal_test_database_url: str = ""
     operator_token: str
     connector_mode: Literal["demo", "google"] = "demo"
     mailbox: str = "support@example.invalid"

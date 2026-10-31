@@ -33,7 +33,8 @@ def public_origin(base):
 
 
 def redirect_uri(base, provider):
-    return public_origin(base) + "/api/oauth/callback/" + provider
+    segment = "test/" if base.workspace == "personal_test" else ""
+    return public_origin(base) + "/api/oauth/callback/" + segment + provider
 
 
 def endpoints(provider, fields):
@@ -63,6 +64,8 @@ def start(session, provider, binding, base, personal=False):
     if provider not in PROVIDERS:
         raise ValueError("Unsupported OAuth provider")
     if personal:
+        if base.workspace != "personal_test":
+            raise ValueError("Use the separate personal test environment")
         if provider != "google":
             raise ValueError("Personal sign-in requires Google")
         marker = session.get(BusinessConfig, "personal")

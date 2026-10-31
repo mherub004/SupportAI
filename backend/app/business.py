@@ -254,7 +254,7 @@ def readiness(session, base):
     docs = [d for d in session.scalars(select(Document)) if not d.id.startswith("demo-") and current(d)]
     connections = {key: public_connector(session.get(Connector, key), base) for key in FIELDS}
     marker = session.get(BusinessConfig, "personal")
-    return {"profile": business, "personal": bool(marker and marker.value.get("enabled")),
+    return {"profile": business, "workspace": base.workspace, "personal": bool(marker and marker.value.get("enabled")),
             "personal_available": bool(marker and marker.value.get("enabled")) or not session.scalar(
                 select(MessageOrigin.message_id).where(MessageOrigin.origin != "demo").limit(1)),
             "active": active(session), "connectors": connections,

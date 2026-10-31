@@ -98,8 +98,14 @@ class State(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
-def database(url):
+def database(url, workspace="company"):
     engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
+    if workspace == "personal_test" and engine.dialect.name == "postgresql":
+        from sqlalchemy.schema import CreateSchema
+        from app.workspaces import TEST_SCHEMA
+        with engine.begin() as connection:
+            connection.execute(CreateSchema(TEST_SCHEMA, if_not_exists=True))
+        engine = engine.execution_options(schema_translate_map={None: TEST_SCHEMA})
     return engine, sessionmaker(engine, expire_on_commit=False)
 
 

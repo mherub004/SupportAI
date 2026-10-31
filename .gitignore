@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 *.db
 *.db-*
+*.db.personal-test
 node_modules/
 .next/
 *.tsbuildinfo

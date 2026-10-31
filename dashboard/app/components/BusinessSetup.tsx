@@ -1,4 +1,5 @@
 "use client";
+import { workspaceHeaders } from "../../lib/workspace-client";
 import DriveKnowledge from "./DriveKnowledge";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
@@ -24,7 +25,7 @@ const names: Record<string, string> = { google: "Google Workspace", gemini: "Gem
 const geminiFields = [["gemini_api_key", "Gemini API key", true], ["gemini_model", "Approved model ID", false]] as const;
 
 async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> {
-  const response = await fetch(`/api/backend/${path}`, { method, cache: "no-store", headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const response = await fetch(`/api/backend/${path}`, { method, cache: "no-store", headers: { ...workspaceHeaders(), "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.detail || "Operation failed");
   return result;
@@ -52,7 +53,7 @@ export default function BusinessSetup({ onChanged }: { onChanged: () => Promise<
   const connect = async (provider: string) => {
     setBusy(true); setError("");
     try {
-      const response = await fetch(`/api/oauth/start/${provider}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const response = await fetch(`/api/oauth/start/${provider}`, { method: "POST", headers: { ...workspaceHeaders(), "Content-Type": "application/json" }, body: "{}" });
       const data = await response.json(); if (!response.ok) throw new Error(data.detail || "Cannot start sign-in");
       window.location.assign(data.authorization_url);
     } catch (e) { setError(e instanceof Error ? e.message : "Connection failed"); setBusy(false); }
