@@ -1,6 +1,6 @@
 # SupportFlow AI
 
-A configurable, draft-first support workspace for a business, with FastAPI, Next.js/TypeScript, PostgreSQL, and optional Gmail/Drive/Gemini connections. Deploy first, then complete **Business setup** in the application. Use one isolated installation and database per company. See [business onboarding](docs/BUSINESS_SETUP.md).
+A configurable, draft-first support workspace with FastAPI, Next.js/TypeScript, PostgreSQL, and optional Gmail/Drive/Gemini connections. Start with **Personal setup**: Connect Google, choose approved knowledge, save a Gemini key and test drafts. [One-time host OAuth configuration](docs/PERSONAL_QUICKSTART.md) enables provider sign-in buttons. **Business setup** remains available for company policies and CRM administration. Use one isolated installation and database per company. See [business onboarding](docs/BUSINESS_SETUP.md).
 
 **This is a pilot implementation, not an authorized production agent.** It starts with synthetic data, automatic sending disabled, and the mailbox kill switch enabled. No real ABL/Wallbox manuals, customer data, company approvals, or invented API credentials are included. The full plan describes a 14–18 week organizational rollout; [delivery status](docs/DELIVERY_STATUS.md) distinguishes implemented capabilities from approval/access and future work.
 

@@ -48,11 +48,6 @@ export default function BusinessSetup({ onChanged }: { onChanged: () => Promise<
   }, []);
   useEffect(() => {
     load().catch(e => setError(e.message));
-    const query = new URLSearchParams(window.location.search);
-    if (query.has("connection")) {
-      setNotice(query.get("result") === "connected" ? "Account connected securely. Verify access, select approved knowledge, then activate draft-only processing." : "Account authorization was not completed. Check app/client configuration, exact callback URL, permissions and selected account, then reconnect.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
   }, [load]);
   const connect = async (provider: string) => {
     setBusy(true); setError("");

@@ -250,7 +250,9 @@ def create_app(config=None, db=None, workflow=None):
     from app.oauth import install_routes as install_oauth
     from app.drive_setup import install_routes as install_drive
     from app.crm_routes import install_routes as install_crm
+    from app.personal import install_routes as install_personal
     install_oauth(app, config, factory, operator)
     install_drive(app, config, factory, operator)
     install_crm(app, config, factory, operator)
+    install_personal(app, config, factory, operator)
     return app

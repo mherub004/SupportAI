@@ -1,5 +1,7 @@
 # Test SupportFlow with two personal email accounts
 
+For the shorter **Connect Google → choose knowledge → save Gemini key** flow, start with [Personal setup](PERSONAL_QUICKSTART.md). The manual Google registration steps below remain the host's one-time prerequisite; the later email/function checklist applies to either setup flow.
+
 Use this guide before sharing the application. Automated tests check implementation behavior; this exercise checks your deployed service, real account permissions, model output and the email round trip. **All live checks below are pending until you perform them.**
 
 ## 1. Choose the accounts and deployment

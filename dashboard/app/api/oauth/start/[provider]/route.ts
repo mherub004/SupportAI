@@ -10,9 +10,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
   if (!token) return NextResponse.json({ detail: "Sign in first" }, { status: 401 });
   const binding = randomBytes(32).toString("base64url");
   try {
+    const input = await request.json();
     const result = await fetch(`${process.env.API_URL || "http://127.0.0.1:8000"}/api/business/oauth/${provider}/start`, {
       method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ binding }), cache: "no-store", signal: AbortSignal.timeout(30000),
+      body: JSON.stringify({ binding, personal: input.personal === true }), cache: "no-store", signal: AbortSignal.timeout(30000),
     });
     const data = await result.json();
     const response = NextResponse.json(data, { status: result.status, headers: { "Cache-Control": "no-store" } });

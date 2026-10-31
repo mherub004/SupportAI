@@ -9,6 +9,7 @@ test("guided Google connection uses PKCE and rejects a forged OAuth callback", a
   await page.goto("/");
   await page.getByLabel("Operator access token").fill(env.OPERATOR_TOKEN);
   await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: "Business setup", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
   await expect(page.getByText("Using NotebookLM?", { exact: true })).toBeVisible();
   const google = page.locator(".connector-card").filter({ has: page.getByRole("heading", { name: "Google Workspace", exact: true }) });
@@ -34,6 +35,7 @@ test("guided Google connection uses PKCE and rejects a forged OAuth callback", a
   expect(binding?.httpOnly).toBe(true);
   expect(binding?.sameSite).toBe("Lax");
   await page.goto(`${origin}/api/oauth/callback/google?state=${"forged".repeat(8)}&code=invalid-code`);
+  await page.getByRole("button", { name: "Business setup", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
   await expect(page.getByRole("status")).toContainText("authorization was not completed");
   expect((await context.cookies(`${origin}/api/oauth/callback/google`)).some(cookie => cookie.name === "sf_oauth_google")).toBe(false);

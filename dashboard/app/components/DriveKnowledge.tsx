@@ -9,13 +9,13 @@ async function api<T>(path: string, method = "GET", body?: unknown): Promise<T> 
   if (!response.ok) throw new Error(result.detail || "Drive request failed");
   return result;
 }
-export default function DriveKnowledge({ company, onChanged }: { company: string; onChanged: () => Promise<void> }) {
+export default function DriveKnowledge({ company, onChanged, personalOwner }: { company: string; onChanged: () => Promise<void>; personalOwner?: string }) {
   const [files, setFiles] = useState<FileRow[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
-  const [metadata, setMetadata] = useState({ brand: company.slice(0, 40), model: "general", language: "en", owner: "", customer_url: "", approved: false });
+  const [metadata, setMetadata] = useState({ brand: company.slice(0, 40), model: "general", language: "en", owner: personalOwner || "", customer_url: "", approved: false });
   async function browse() {
     setBusy(true); setError(""); setNotice("");
     try { setFiles(await api<FileRow[]>("business/drive/files")); setNotice("Folder loaded. Preview and approve each exact document version before it can ground replies."); }
@@ -42,11 +42,11 @@ export default function DriveKnowledge({ company, onChanged }: { company: string
     {error && <p className="error" role="alert">{error}</p>}{notice && <p className="notice alert" role="status">{notice}</p>}
     {files.length > 0 && <ul className="drive-file-list">{files.map(file => <li key={file.id}><div><strong>{file.title}</strong><small>Revision {file.revision} · {file.approved ? "Approved" : "Needs review"}</small></div><button disabled={busy || !["application/vnd.google-apps.document", "text/plain", "text/markdown", "application/pdf"].includes(file.mime_type)} type="button" onClick={() => void open(file)}>Preview</button></li>)}</ul>}
     {preview && <form className="source-preview" onSubmit={approve}><h3>{preview.title}</h3><small>Revision {preview.revision} · Internal preview, not sent to Gemini during import</small><label>Extracted source preview<textarea readOnly rows={8} value={preview.content}/></label><div className="setup-grid">
-      <label>Drive source business / product family<input required maxLength={40} value={metadata.brand} onChange={e => setMetadata({ ...metadata, brand: e.target.value })}/></label>
+      {!personalOwner && <><label>Drive source business / product family<input required maxLength={40} value={metadata.brand} onChange={e => setMetadata({ ...metadata, brand: e.target.value })}/></label>
       <label>Drive source model or general<input required maxLength={100} value={metadata.model} onChange={e => setMetadata({ ...metadata, model: e.target.value })}/></label>
-      <label>Drive source knowledge owner<input required maxLength={200} value={metadata.owner} onChange={e => setMetadata({ ...metadata, owner: e.target.value })}/></label>
+      <label>Drive source knowledge owner<input required maxLength={200} value={metadata.owner} onChange={e => setMetadata({ ...metadata, owner: e.target.value })}/></label></>}
       <label>Drive source language<select value={metadata.language} onChange={e => setMetadata({ ...metadata, language: e.target.value })}><option value="en">English</option><option value="de">German</option></select></label>
-      <label>Drive source customer-facing URL (optional)<input type="url" value={metadata.customer_url} onChange={e => setMetadata({ ...metadata, customer_url: e.target.value })}/></label>
+      {!personalOwner && <label>Drive source customer-facing URL (optional)<input type="url" value={metadata.customer_url} onChange={e => setMetadata({ ...metadata, customer_url: e.target.value })}/></label>}
     </div><label className="check-label"><input type="checkbox" checked={metadata.approved} onChange={e => setMetadata({ ...metadata, approved: e.target.checked })}/>I reviewed this exact version and approve it for customer-safe answers.</label><div className="setup-actions"><button className="primary" disabled={busy || !metadata.approved}>Approve and import source</button><button type="button" disabled={busy} onClick={() => setPreview(null)}>Cancel preview</button></div></form>}
   </div>;
 }

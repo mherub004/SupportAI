@@ -253,7 +253,11 @@ def readiness(session, base):
     business = profile(session)
     docs = [d for d in session.scalars(select(Document)) if not d.id.startswith("demo-") and current(d)]
     connections = {key: public_connector(session.get(Connector, key), base) for key in FIELDS}
-    return {"profile": business, "active": active(session), "connectors": connections,
+    marker = session.get(BusinessConfig, "personal")
+    return {"profile": business, "personal": bool(marker and marker.value.get("enabled")),
+            "personal_available": bool(marker and marker.value.get("enabled")) or not session.scalar(
+                select(MessageOrigin.message_id).where(MessageOrigin.origin != "demo").limit(1)),
+            "active": active(session), "connectors": connections,
             "checks": {"company_profile": bool(business),
                        "approved_knowledge": bool(docs),
                        "google_verified": connections["google"]["verified"],

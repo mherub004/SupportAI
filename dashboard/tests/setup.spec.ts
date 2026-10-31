@@ -10,6 +10,7 @@ test("company configures profile, approved knowledge and encrypted connection af
   await page.goto("/");
   await page.getByLabel("Operator access token").fill(env.OPERATOR_TOKEN);
   await page.getByRole("button", { name: "Open workspace" }).click();
+  await page.getByRole("button", { name: "Business setup", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
   const setup = page.locator(".setup-workspace");
   await setup.getByLabel("Company name", { exact: true }).fill("Acme Services UI");
@@ -38,6 +39,7 @@ test("company configures profile, approved knowledge and encrypted connection af
   await expect(gemini.getByLabel("Gemini API key")).toHaveAttribute("placeholder", /Saved securely/);
   await expect(setup.getByRole("button", { name: "Activate draft-only processing" })).toBeDisabled();
   await page.reload();
+  await page.getByRole("button", { name: "Business setup", exact: true }).click();
   await expect(page.getByLabel("Company name", { exact: true })).toHaveValue("Acme Services UI");
   await expect(page.getByLabel("Gemini API key")).toHaveValue("");
   await page.getByRole("button", { name: /^Inbox(?:\s+\d+)?$/ }).click();

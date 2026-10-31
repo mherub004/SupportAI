@@ -11,9 +11,9 @@ import httpx
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 
-from app.business import cipher, decode, digest, save_connector
+from app.business import Profile, cipher, decode, digest, profile, save_connector
 from app.crm import netsuite_account, netsuite_origin, salesforce_login, salesforce_origin
-from app.db import Connector, OAuthAttempt, audit, now
+from app.db import BusinessConfig, Connector, MessageOrigin, OAuthAttempt, audit, now
 
 PROVIDERS = {"google", "salesforce", "netsuite"}
 
@@ -47,10 +47,40 @@ def endpoints(provider, fields):
             netsuite_origin(account) + "/services/rest/auth/oauth2/v1/token")
 
 
-def start(session, provider, binding, base):
+def hosted_fields(provider, base):
+    prefix = "google" if provider == "google" else provider
+    fields = {name: getattr(base, name, "") for name in (prefix + "_client_id", prefix + "_client_secret")}
+    if not all(fields.values()):
+        return {}
+    if provider == "salesforce":
+        fields["salesforce_login_url"] = base.salesforce_login_url
+    if provider == "netsuite" and base.netsuite_account_id:
+        fields["netsuite_account_id"] = base.netsuite_account_id
+    return fields
+
+
+def start(session, provider, binding, base, personal=False):
     if provider not in PROVIDERS:
         raise ValueError("Unsupported OAuth provider")
+    if personal:
+        if provider != "google":
+            raise ValueError("Personal sign-in requires Google")
+        marker = session.get(BusinessConfig, "personal")
+        if profile(session) and not (marker and marker.value.get("enabled")) and session.scalar(
+                select(MessageOrigin.message_id).where(MessageOrigin.origin != "demo").limit(1)):
+            raise ValueError("Use business setup for this existing company")
     record = session.get(Connector, provider)
+    existing_fields = decode(record, base) if record and record.enabled else {}
+    prefix = "google" if provider == "google" else provider
+    if (personal or provider != "google") and not (existing_fields.get(prefix + "_client_id") and existing_fields.get(prefix + "_client_secret")):
+        hosted = hosted_fields(provider, base)
+        if not hosted:
+            raise ValueError("The host must configure its provider OAuth application first")
+        if provider == "netsuite" and existing_fields.get("netsuite_account_id"):
+            hosted["netsuite_account_id"] = existing_fields["netsuite_account_id"]
+        save_connector(session, provider, hosted, base)
+        session.flush()
+        record = session.get(Connector, provider)
     if not record or not record.enabled:
         raise ValueError("Save the administrator app/client configuration first")
     fields = decode(record, base)
@@ -61,7 +91,8 @@ def start(session, provider, binding, base):
     verifier = secrets.token_urlsafe(48)
     state = secrets.token_urlsafe(32)
     uri = redirect_uri(base, provider)
-    payload = {"verifier": verifier, "redirect_uri": uri, "config_digest": digest(fields)}
+    payload = {"verifier": verifier, "redirect_uri": uri, "config_digest": digest(fields),
+               "personal": personal, "profile_digest": digest(profile(session) or {})}
     session.execute(delete(OAuthAttempt).where((OAuthAttempt.expires_at < now()) | OAuthAttempt.consumed))
     session.add(OAuthAttempt(state_hash=fingerprint(state), provider=provider, binding_hash=fingerprint(binding),
                              encrypted_payload=cipher(base).encrypt(json.dumps(payload).encode()).decode(),
@@ -113,12 +144,19 @@ def finish(factory, provider, state, binding, code, base):
         raise ValueError("Offline/refresh access was not granted; check provider application policies and reconnect")
     updates = {prefix + "_refresh_token": tokens["refresh_token"]}
     if provider == "google":
-        if not fields.get("mailbox"):
+        if not fields.get("mailbox") and not payload.get("personal"):
             raise ValueError("Configure the support mailbox first")
         # Validate the actual selected Google identity, using the newly issued access token.
         from app.google import Gmail
-        Gmail(base.model_copy(update={"mailbox": fields["mailbox"], "google_refresh_token": "",
-                                     "gmail_access_token": tokens["access_token"]})).verify_mailbox()
+        gmail = Gmail(base.model_copy(update={"google_refresh_token": "", "gmail_access_token": tokens["access_token"]}))
+        if payload.get("personal"):
+            mailbox = gmail.request("GET", gmail.root + "profile").json()["emailAddress"].casefold()
+            personal_profile = Profile(name="Personal inbox", industry="Personal email testing",
+                                       support_email=mailbox, escalation_email=mailbox, languages=["en", "de"])
+            updates["mailbox"] = mailbox
+        else:
+            gmail.config.mailbox = fields["mailbox"]
+            gmail.verify_mailbox()
         updates["gmail_access_token"] = ""  # Refresh token is authoritative for continued access.
     else:
         updates[prefix + "_access_token"] = tokens["access_token"]
@@ -128,6 +166,20 @@ def finish(factory, provider, state, binding, code, base):
         record = session.scalar(select(Connector).where(Connector.id == provider).with_for_update())
         if not record or digest(decode(record, base)) != payload["config_digest"]:
             raise ValueError("Connection changed while authorizing; reconnect")
+        if payload.get("personal"):
+            if digest(profile(session) or {}) != payload["profile_digest"]:
+                raise ValueError("Profile changed while authorizing")
+            if session.scalar(select(MessageOrigin.message_id).where(
+                    MessageOrigin.origin != "demo", MessageOrigin.origin != "google:" + mailbox).limit(1)):
+                raise ValueError("Use a separate installation for a different mailbox")
+            existing = session.get(BusinessConfig, "profile")
+            if not existing:
+                session.add(BusinessConfig(key="profile", value=personal_profile.model_dump()))
+            elif existing.value.get("support_email") != mailbox or not session.get(BusinessConfig, "personal"):
+                existing.value = personal_profile.model_dump()
+            marker = session.get(BusinessConfig, "personal")
+            if not marker:
+                session.add(BusinessConfig(key="personal", value={"enabled": True}))
         save_connector(session, provider, updates, base)
         record = session.get(Connector, provider)
         saved = decode(record, base)
@@ -137,12 +189,15 @@ def finish(factory, provider, state, binding, code, base):
         else:
             saved["_access_expires"] = (now() + timedelta(seconds=min(int(tokens.get("expires_in", 900)), 3600)-60)).isoformat()
         record.encrypted_config = cipher(base).encrypt(json.dumps(saved).encode()).decode()
+        if payload.get("personal") and not saved.get("drive_folder_id"):
+            record.verified_at, record.verified_digest = now(), digest(saved)
         audit(session, "oauth_connected", provider, actor="operator")
         session.commit()
 
 
 class StartInput(BaseModel):
     binding: str = Field(min_length=32, max_length=200)
+    personal: bool = False
 
 
 class FinishInput(StartInput):
@@ -157,7 +212,17 @@ def install_routes(app, base, factory, operator):
     @app.get("/api/business/oauth", dependencies=secured)
     def oauth_status():
         try:
-            return {"available": True, "redirect_uris": {key: redirect_uri(base, key) for key in sorted(PROVIDERS)}}
+            with factory() as session:
+                ready = {}
+                for key in PROVIDERS:
+                    record = session.get(Connector, key)
+                    fields = decode(record, base) if record and record.enabled else {}
+                    if not (fields.get(key + "_client_id") and fields.get(key + "_client_secret")):
+                        fields = {**fields, **hosted_fields(key, base)}
+                    ready[key] = bool(fields.get(key + "_client_id") and fields.get(key + "_client_secret")
+                                      and (key != "netsuite" or fields.get("netsuite_account_id")))
+            return {"available": True, "google_ready": ready["google"], "provider_ready": ready,
+                    "redirect_uris": {key: redirect_uri(base, key) for key in sorted(PROVIDERS)}}
         except ValueError:
             return {"available": False, "redirect_uris": {}, "detail": "Set PUBLIC_APP_URL to the HTTPS dashboard origin"}
 
@@ -165,7 +230,7 @@ def install_routes(app, base, factory, operator):
     def oauth_start(provider: str, data: StartInput):
         try:
             with factory() as session:
-                return start(session, provider, data.binding, base)
+                return start(session, provider, data.binding, base, data.personal)
         except (ValueError, KeyError):
             raise HTTPException(422, "Save the provider's app/client configuration and configure the public callback origin first") from None
 
