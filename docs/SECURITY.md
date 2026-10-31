@@ -10,6 +10,7 @@ This code is a single-organization pilot. It is not a multi-tenant SaaS, a certi
 - Draft review is the default. Explicitly enabled automation can send eligible grounded/certain FAQ and product-specification prose as well as approved manual links. Risk-tagged, uncertain and ungrounded cases remain blocked. Personal automatic tests require an exact sender allowlist and only newly received mail can enter the new automation mode.
 - Source approval/classification, effective/expiry dates, revision/checksum/customer-link rechecks and bounded scope. Unknown/mixed product routing fails closed.
 - Message IDs and send reservations protect retry behavior. Drafts are verified immediately before sending, including recipient, sender, threading headers, body and absence of CC/BCC.
+- Human handoff pauses customer replies and queues a separate internal Gmail notification. Notifications use a durable reservation, per-workspace attempt quota, automation loop headers and sent-message verification after uncertainty. Only authenticated operators can retry an unattempted alert or resume ownership; already-started external requests cannot be recalled.
 - Google JWT push verification; no unauthenticated operator mutations. General exceptions return a generic error; worker/audit store error types rather than provider response bodies.
 - Secrets are ignored by Git. Containers run as non-root. The database has no published port. Default published app ports are loopback only.
 

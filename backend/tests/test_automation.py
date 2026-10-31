@@ -16,6 +16,11 @@ from app.service import Conflict, Workflow, ingest, upsert_document
 from app.worker import run_one
 
 
+@pytest.fixture(autouse=True)
+def controlled_internal_alerts(monkeypatch):
+    monkeypatch.setattr("app.google.Gmail.alert", lambda *args: "controlled-human-alert")
+
+
 class Mail(DemoMail):
     sends = 0
 
@@ -161,6 +166,9 @@ def test_ambiguous_customer_does_not_write_any_crm_record(setup, email, document
     sync(factory, config, email.id, "salesforce")
     with factory() as session:
         assert session.get(CrmDelivery, (email.id, "salesforce")).error == "Customer_ambiguous"
+        from app.db import HumanHandoff, Conversation
+        assert session.get(HumanHandoff, email.id).active
+        assert session.get(Conversation, email.thread_id).paused
     assert crm.activities == crm.cases == 0 and mail.sends == 1
 
 
@@ -307,7 +315,9 @@ def test_verified_case_mapping_resolves_ambiguity_without_resending(setup, email
     with TestClient(create_app(base, (engine, factory))) as client:
         result = client.put(f"/api/automation/deliveries/{email.id}/salesforce/case", headers={"Authorization": "Bearer " + base.operator_token}, json={"case_id": "500000000000001"})
         assert result.status_code == 200
-    assert run_one(factory, workflow)
+    for _ in range(3):
+        if not run_one(factory, workflow):
+            break
     assert crm.activities == crm.cases == mail.sends == 1
 
 

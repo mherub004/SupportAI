@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     production_approved: bool = False
     auto_send_categories: str = "manual_link,clarification"
     hourly_send_limit: int = 10
+    human_alert_hourly_limit: int = 20
     gmail_access_token: str = ""
     google_refresh_token: str = ""
     google_client_id: str = ""

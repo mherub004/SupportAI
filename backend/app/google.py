@@ -76,6 +76,20 @@ class GoogleClient:
 class Gmail(GoogleClient):
     root = "gmail/v1/users/me/"
 
+    def alert(self, recipient, body, rfc_id):
+        from app.policy import valid_recipient
+        if not valid_recipient(recipient) or parseaddr(recipient)[1] != recipient:
+            raise ValueError("Invalid human escalation recipient")
+        self.verify_mailbox()
+        message = EmailMessage(policy=SMTP)
+        message["From"], message["To"] = self.config.mailbox, recipient
+        message["Subject"] = "SupportFlow: customer conversation needs human review"
+        message["Message-ID"] = rfc_id
+        message["Auto-Submitted"], message["X-SupportFlow"] = "auto-generated", "1"
+        message.set_content(body)
+        return self.request("POST", self.root + "messages/send", json={
+            "raw": base64.urlsafe_b64encode(message.as_bytes()).decode()}).json()["id"]
+
     def verify_mailbox(self):
         profile = self.request("GET", self.root + "profile").json()
         if profile["emailAddress"].casefold() != self.config.mailbox.casefold():

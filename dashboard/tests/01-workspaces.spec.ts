@@ -7,7 +7,7 @@ test("company and personal test keep knowledge separate across switches and brow
   await page.goto("/");
   await page.getByLabel("Operator access token").fill(token);
   await page.getByRole("button", { name: "Open workspace" }).click();
-  await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your support assistant" })).toBeVisible();
   const origin = new URL(page.url()).origin;
   for (const workspace of ["company", "test"]) {
     const result = await page.request.put(`${origin}/api/backend/knowledge`, {
@@ -24,7 +24,7 @@ test("company and personal test keep knowledge separate across switches and brow
   await expect(page.getByRole("heading", { name: "company private knowledge" })).toHaveCount(0);
   const company = await context.newPage();
   await company.goto("/");
-  await expect(company.getByRole("heading", { name: "Set up your business" })).toBeVisible();
+  await expect(company.getByRole("heading", { name: "Your support assistant" })).toBeVisible();
   await company.getByRole("button", { name: "Knowledge", exact: true }).click();
   await expect(company.getByRole("heading", { name: "company private knowledge" })).toBeVisible();
   await expect(company.getByRole("heading", { name: "test private knowledge" })).toHaveCount(0);

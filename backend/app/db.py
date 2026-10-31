@@ -112,6 +112,20 @@ class CrmDelivery(Base):
     error: Mapped[str] = mapped_column(String(100), default="")
 
 
+class HumanHandoff(Base):
+    __tablename__ = "human_handoffs"
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("conversations.id"), index=True)
+    recipient: Mapped[str] = mapped_column(String(320))
+    reasons: Mapped[list] = mapped_column(JSON, default=list)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    status: Mapped[str] = mapped_column(String(30), default="pending")
+    outbound_id: Mapped[str] = mapped_column(String(255), default="")
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str] = mapped_column(String(100), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
+
+
 def database(url, workspace="company"):
     engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
     if workspace == "personal_test" and engine.dialect.name == "postgresql":

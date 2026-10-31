@@ -20,6 +20,10 @@ Exact source quotes establish traceability, not a proof that all generated prose
 
 Only messages with Google's trusted API `internalDate` on or after the current activation time can enter this new automatic mode. Sender-provided copies of that internal timestamp are discarded by the Gmail adapter. Older/out-of-scope messages are excluded without model calls, draft creation or sends. No automatic backlog replay occurs after pausing/reactivating. Existing draft-only and legacy template behavior remains unchanged when the new policy is disabled.
 
+## Human handling when the assistant cannot safely answer
+
+Configured-business risk, uncertainty and missing grounding pause that conversation and queue an internal email to the configured escalation contact. CRM ambiguity, uncertain writes and exhausted retries also notify the team. The **Handoffs** screen shows the reason, notification state and explicit resume action. [Human handoff setup and recovery](HUMAN_HANDOFF.md) describes deduplication, delivery verification and notification limits. Pending notifications and CRM logging continue when customer processing is paused.
+
 ## Confirmed delivery, then customer activity and support case
 
 Automatic sending has its own durable job. A draft is verified for recipient, text and threading immediately before a send reservation is persisted. A crash or timeout after reservation does not authorize another send. Use Gmail reconciliation to confirm an uncertain send; CRM work is created only after confirmation.

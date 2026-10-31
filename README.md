@@ -1,10 +1,14 @@
 # SupportFlow AI
 
-A configurable, draft-first support workspace with FastAPI, Next.js/TypeScript, PostgreSQL, and optional Gmail/Drive/Gemini connections. **Company workspace** keeps the full business setup and connectors. Beside it, **Personal test environment** has separate settings, mailbox authorization, knowledge, messages and jobs: connect Google, choose approved knowledge, save a Gemini key and test drafts. [One-time host OAuth configuration](docs/PERSONAL_QUICKSTART.md) enables provider sign-in buttons. Use one installation per company; the built-in personal test area shares hosting resources but uses separate storage. See [business onboarding](docs/BUSINESS_SETUP.md).
+A configurable AI customer-support assistant that works alongside your existing helpdesk. It can answer eligible Gmail questions from approved knowledge, log confirmed replies against customer activities and support cases in Salesforce/NetSuite, and pause conversations for a human when needed. The light dashboard shows your assistant, connected services and human handoffs.
+
+**Company workspace** keeps business setup and connectors; **Personal test environment** keeps separate settings, mailbox authorization, knowledge, messages and jobs. [One-time host OAuth configuration](docs/PERSONAL_QUICKSTART.md) enables provider sign-in buttons. Use one installation per company. See [business onboarding](docs/BUSINESS_SETUP.md) and [human handoff](docs/HUMAN_HANDOFF.md).
 
 **This is a pilot implementation, not an authorized production agent.** It starts with synthetic data, automatic sending disabled, and the mailbox kill switch enabled. No real ABL/Wallbox manuals, customer data, company approvals, or invented API credentials are included. The full plan describes a 14–18 week organizational rollout; [delivery status](docs/DELIVERY_STATUS.md) distinguishes implemented capabilities from approval/access and future work.
 
-![Synthetic operator workspace](docs/assets/inbox.png)
+![Light assistant dashboard with synthetic demo data](docs/assets/assistant-light.png)
+
+Screenshot captured from the running application with synthetic data. [Human handoff guide](docs/HUMAN_HANDOFF.md).
 
 ## Hosted demo option
 
@@ -62,7 +66,7 @@ If Chromium is already installed, use `CHROMIUM_PATH=/usr/bin/chromium npm run t
 
 ## Configure any business after deployment
 
-The Business setup screen supports company details, response tone, human escalation policies, approved knowledge entry, encrypted connector settings, read-only verification, and draft-only activation. Unconfigured providers stay inactive. Saving changes pauses processing. Existing demo data is retained separately from live provider identities. Supported integrations are listed explicitly; unsupported services cannot be connected yet.
+The Business setup screen supports company details, response tone, human escalation policies, approved knowledge entry, encrypted connector settings, access verification, and explicit activation of your chosen reply policy. Unconfigured providers stay inactive. Saving changes pauses processing. Existing demo data is retained separately from live provider identities. Supported integrations are listed explicitly; unsupported services cannot be connected yet.
 
 ## Automatic support replies and CRM logging
 
@@ -70,6 +74,7 @@ The Business setup screen supports company details, response tone, human escalat
 
 ## What works
 
+- Human handoff: thread ownership/pause, one active notification per conversation, Gmail delivery verification after uncertainty, and explicit operator resume.
 - Authenticated operator review workspace: inbox, source excerpts/revisions, response editing/approval, thread takeover, mailbox kill switch, knowledge registry, job status, audit metadata.
 - SQL-backed durable queue with leases, bounded retries and unique ingestion keys; separate API and worker processes.
 - Approved, effective, customer-safe knowledge filtered by exact brand, model and language. Unknown or ambiguous product models remain review-only. Retrieved source quotes and checksums are verified before use; send time rechecks source revisions and metadata.
@@ -109,6 +114,6 @@ The Next.js dashboard has an OpenNext Workers deployment target. The Python API,
 
 ## Email + knowledge + CRM integrations
 
-[Follow the guided integration setup](docs/INTEGRATIONS.md). Register each OAuth app once, then connect Google, Salesforce or NetSuite through provider sign-in. Browse and approve original Drive documents used by NotebookLM. Gmail holds the generated drafts; optional CRM customer lookups are available to reviewers and never modify records or automatically disclose account facts.
+[Follow the guided integration setup](docs/INTEGRATIONS.md). Register each OAuth app once, then connect Google, Salesforce or NetSuite through provider sign-in. Browse and approve original Drive documents used by NotebookLM. Gmail holds the generated drafts; optional CRM customer lookups are available to reviewers. Explicitly selected automation destinations can log confirmed deliveries to customer activities and support cases; CRM account facts are not automatically disclosed to customers.
 
 Before sharing, [test with two personal email accounts](docs/PERSONAL_TEST.md). The guide includes Google's External/Testing OAuth setup, synthetic English/German knowledge, a real email round trip, and 30 user-function checks plus optional CRM tests. Use the **Personal test environment** beside the company workspace to keep personal test data separate.

@@ -72,14 +72,16 @@ def sync(factory, base, message_id, provider):
             row.status, row.error = "needs_review", "UnconfirmedOrWrongMailbox"
             session.commit()
             return
+        if row.activity_state == "reserved" or row.case_state == "reserved":
+            row.status, row.error = "needs_review", "UncertainExternalWrite"
+            from app.handoffs import queue
+            queue(session, message, base.model_copy(update={"escalation_email": business["escalation_email"]}), ["crm_write_needs_review"])
+            session.commit()
+            return
         if provider not in policy(session)["crm_providers"]:
             row.status, row.error = "paused", "ProviderDisabled"
             session.commit()
             return
-        if row.activity_state == "reserved" or row.case_state == "reserved":
-            row.status, row.error = "needs_review", "UncertainExternalWrite"
-            session.commit()
-            return  # A timeout/crash is never permission to repeat a POST.
         connector = session.get(Connector, provider)
         if (not connector or not connector.enabled or not connector.verified_at
                 or connector.verified_digest != digest(decode(connector, base))):
@@ -107,6 +109,8 @@ def sync(factory, base, message_id, provider):
             match = client.lookup(parseaddr(message.sender)[1])
             if match["status"] != "matched":
                 row.status, row.error = "needs_review", "Customer_" + match["status"]
+                from app.handoffs import queue
+                queue(session, message, base.model_copy(update={"escalation_email": business["escalation_email"]}), ["crm_customer_match_requires_review"])
                 session.commit()
                 return
             row.customer_id = match["records"][0]["record_id"]
@@ -114,12 +118,16 @@ def sync(factory, base, message_id, provider):
             references = set(re.findall(r"\b(?:case|ticket)\s*[:#-]?\s*(\d{1,20})\b", message.subject, re.I))
             if len(references) > 1:
                 row.status, row.error = "needs_review", "AmbiguousCaseReference"
+                from app.handoffs import queue
+                queue(session, message, base.model_copy(update={"escalation_email": business["escalation_email"]}), ["crm_case_match_requires_review"])
                 session.commit()
                 return
             cases = (client.support_cases(row.customer_id, next(iter(references)))
                      if references else client.support_cases(row.customer_id))
             if len(cases) != 1:
                 row.status, row.error = "needs_review", "CaseMissingOrAmbiguous"
+                from app.handoffs import queue
+                queue(session, message, base.model_copy(update={"escalation_email": business["escalation_email"]}), ["crm_case_match_requires_review"])
                 session.commit()
                 return
             row.case_id = cases[0]

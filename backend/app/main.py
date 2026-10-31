@@ -142,6 +142,12 @@ def create_app(config=None, db=None, workflow=None):
         if not conversation:
             raise HTTPException(404, "Thread not found")
         conversation.paused, conversation.owner = data.paused, data.owner
+        if not data.paused:
+            from app.db import HumanHandoff
+            for handoff in session.scalars(select(HumanHandoff).where(HumanHandoff.thread_id == thread_id, HumanHandoff.active).with_for_update()):
+                handoff.active = False
+                if handoff.status not in {"reserved", "uncertain"}:
+                    handoff.status = "resolved"
         audit(session, "ownership_changed", thread_id, actor="operator", paused=data.paused, owner=data.owner)
         session.commit()
         return {"paused": conversation.paused}
@@ -252,11 +258,13 @@ def create_app(config=None, db=None, workflow=None):
     from app.crm_routes import install_routes as install_crm
     from app.personal import install_routes as install_personal
     from app.automation import install_routes as install_automation
+    from app.handoffs import install_routes as install_handoffs
     install_oauth(app, config, factory, operator)
     install_drive(app, config, factory, operator)
     install_crm(app, config, factory, operator)
     install_personal(app, config, factory, operator)
     install_automation(app, config, factory, operator)
+    install_handoffs(app, config, factory, operator)
     return app
 
 

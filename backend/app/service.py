@@ -122,7 +122,7 @@ class Workflow:
             brand_query = select(Document.brand).distinct()
             if self.config.configured_business:
                 brand_query = brand_query.where(~Document.id.like("demo-%"))
-            brands = list(session.scalars(brand_query)) or ["ABL", "Wallbox"]
+            brands = list(session.scalars(brand_query)) or ([self.config.business_name] if self.config.configured_business else ["ABL", "Wallbox"])
             email.language, email.brand, email.risk_tags = classify(email, brands)
             if self.config.automation_allowed_senders and parseaddr(email.sender)[1].casefold() not in self.config.automation_allowed_senders:
                 email.risk_tags = email.risk_tags + ["outside_automation_senders"]
@@ -172,14 +172,17 @@ class Workflow:
                          if email.language == "de" else "Please share the brand, exact model, and error code.")
                         if proposal.category == "clarification" else safe_response(email.language)
                     )
+                if not grounded and self.config.configured_business and proposal.category == "clarification":
+                    email.response = ("Bitte beschreiben Sie Ihr Anliegen genauer, damit unser Team Ihnen helfen kann."
+                                      if email.language == "de" else "Please share a little more detail about your request so our team can help.")
                 if proposal.uncertain:
                     email.risk_tags = email.risk_tags + ["model_uncertain"]
                 if SAFETY.search(proposal.response):
                     email.response = safe_response(email.language)
                     email.risk_tags = email.risk_tags + ["unsafe_output"]
                     email.disposition = "escalate"
-                # No LLM-generated prose is automatically sent in this pilot. The eligible
-                # category only sends a backend-owned link template after all gates pass.
+                # The default manual-link path uses a backend-owned template.
+                # Explicit automation additionally permits grounded FAQ/specification prose below.
                 if (grounded and not email.risk_tags and proposal.category == "manual_link"
                         and email.model != "unknown"
                         and all(d.customer_url for d in docs if d.id in {c.document_id for c in proposal.citations})):
@@ -195,6 +198,9 @@ class Workflow:
                     email.disposition = "eligible"
             email.provider_version = self.model.version
             email.status = "ready"
+            if self.config.configured_business and email.risk_tags:
+                from app.handoffs import queue
+                queue(session, email, self.config)
             audit(session, "decision_created", email.id, disposition=email.disposition,
                   risk_tags=email.risk_tags, model=email.provider_version,
                   source_revisions=[{"id": c["document_id"], "revision": c["revision"]} for c in email.citations])

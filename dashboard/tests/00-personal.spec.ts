@@ -13,7 +13,7 @@ test("personal setup is the entry point and explains missing host authorization"
   await expect(page.getByLabel("Google OAuth client secret")).toHaveCount(0);
   await expect(page.getByLabel("Personal test Google callback")).toHaveValue(/\/api\/oauth\/callback\/test\/google$/);
   await page.getByRole("button", { name: "Company workspace", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Set up your business" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your support assistant" })).toBeVisible();
 });
 
 test("personal user chooses approved knowledge and a key before explicitly starting drafts", async ({ page }) => {
