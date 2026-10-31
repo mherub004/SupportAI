@@ -69,7 +69,7 @@ test("personal user chooses approved knowledge and a key before explicitly start
   await expect(page.getByRole("button", { name: "Start personal test" })).toBeDisabled();
   await page.getByLabel("I authorize processing this mailbox").check();
   await page.getByRole("button", { name: "Start personal test" }).click();
-  await expect(page.getByText("Personal testing active.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Personal testing active under your saved reply policy.", { exact: false })).toBeVisible();
   await expect(page.getByLabel("Personal Gemini API key")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Pause test" })).toBeEnabled();
 });
@@ -79,6 +79,7 @@ for (const provider of ["salesforce", "netsuite"]) {
     await page.goto("/?workspace=test");
     await page.getByLabel("Operator access token").fill(token);
     await page.getByRole("button", { name: "Open workspace" }).click();
+    await expect(page.getByRole("heading", { name: "Try your personal inbox" })).toBeVisible();
     const origin = new URL(page.url()).origin;
     const fields: Record<string, string> = { [provider + "_client_id"]: "synthetic-client", [provider + "_client_secret"]: "synthetic-secret" };
     if (provider === "netsuite") fields.netsuite_account_id = "123456_SB1";

@@ -24,7 +24,7 @@ FIELDS = {
     "salesforce": {"salesforce_client_id", "salesforce_client_secret", "salesforce_login_url",
                    "salesforce_instance_url", "salesforce_refresh_token", "salesforce_access_token"},
     "netsuite": {"netsuite_account_id", "netsuite_client_id", "netsuite_client_secret",
-                 "netsuite_refresh_token", "netsuite_access_token"},
+                 "netsuite_refresh_token", "netsuite_access_token", "netsuite_case_reply_field"},
 }
 
 
@@ -119,6 +119,13 @@ def runtime(base, factory):
                    "business_name": business["name"], "business_industry": business["industry"],
                    "response_tone": business["tone"], "escalation_keywords": business["escalation_keywords"],
                    "supported_languages": business["languages"], "escalation_email": business["escalation_email"], "mailbox": business["support_email"]}
+        from app.automation import policy
+        automation = policy(session)
+        if automation["enabled"] and updates["business_active"]:
+            updates.update(review_only=False, auto_send_enabled=True, production_approved=True,
+                           automation_enabled=True, automation_allowed_senders=automation["allowed_senders"],
+                           automation_started_at=session.get(BusinessConfig, "activation").value.get("since", ""),
+                           auto_send_categories="manual_link,setup_faq,product_specs", hourly_send_limit=automation["hourly_limit"])
         if not updates["business_active"]:
             updates["connector_mode"] = "demo"
         else:
@@ -186,6 +193,10 @@ def save_connector(session, key, data, base):
     if key == "netsuite" and fields.get("netsuite_account_id"):
         from app.crm import netsuite_account
         netsuite_account(fields["netsuite_account_id"])
+    if key == "netsuite" and fields.get("netsuite_case_reply_field"):
+        import re
+        if not re.fullmatch(r"custevent_[a-z0-9_]+", fields["netsuite_case_reply_field"]):
+            raise ValueError("Use a dedicated NetSuite case custom text field")
     identity_fields = {"google": ("mailbox", "google_client_id", "google_client_secret"),
                        "salesforce": ("salesforce_client_id", "salesforce_client_secret", "salesforce_login_url"),
                        "netsuite": ("netsuite_account_id", "netsuite_client_id", "netsuite_client_secret")}
@@ -250,6 +261,7 @@ def verify_connector(key, fields, base):
 
 
 def readiness(session, base):
+    from app.automation import policy
     business = profile(session)
     docs = [d for d in session.scalars(select(Document)) if not d.id.startswith("demo-") and current(d)]
     connections = {key: public_connector(session.get(Connector, key), base) for key in FIELDS}
@@ -264,9 +276,9 @@ def readiness(session, base):
                        "gemini_verified": connections["gemini"]["verified"],
                        "policy_acknowledged": bool(business and business.get("acknowledgement"))},
             "deployment_model": "One isolated deployment and database per company",
-            "supported_integrations": ["Gmail", "Google Drive", "Gemini", "Salesforce (read-only)", "NetSuite (read-only)", "Manual knowledge"],
+            "supported_integrations": ["Gmail", "Google Drive", "Gemini", "Salesforce", "NetSuite", "Manual knowledge"],
             "unavailable_integrations": ["Microsoft 365", "Shopify", "WhatsApp"],
-            "sending_mode": "draft_only"}
+            "sending_mode": "automatic" if policy(session)["enabled"] else "draft_only"}
 
 
 def activate(session, base):
@@ -293,8 +305,11 @@ def activate(session, base):
     cursor = session.get(State, "gmail_history")
     if cursor:
         session.delete(cursor)
-    session.get(BusinessConfig, "activation").value = {"active": True}
-    audit(session, "business_activated_draft_only", "business", actor="operator")
+    session.get(BusinessConfig, "activation").value = {"active": True, "since": now().isoformat()}
+    from app.automation import policy
+    if policy(session)["enabled"]:
+        session.get(State, "kill_switch").value = "off"
+    audit(session, "business_activated_automatic" if policy(session)["enabled"] else "business_activated_draft_only", "business", actor="operator")
 
 
 def install_routes(app, base, factory, operator):
@@ -400,8 +415,10 @@ def install_routes(app, base, factory, operator):
     def activate_business():
         with factory() as session:
             activate(session, base)
+            from app.automation import policy
+            automatic = policy(session)["enabled"]
             session.commit()
-        return {"status": "active", "sending_mode": "draft_only"}
+        return {"status": "active", "sending_mode": "automatic" if automatic else "draft_only"}
 
     @app.post("/api/business/pause", dependencies=secured)
     def pause_business():

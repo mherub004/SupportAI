@@ -1,5 +1,7 @@
 # Deploy once, configure the business later
 
+For the automatic email → customer activity → support case workflow, follow [AUTOMATION.md](AUTOMATION.md). Draft review remains the default; the older draft-only/read-only descriptions below describe that default mode.
+
 Testing before handing this to a company? Follow [the personal Gmail test guide](PERSONAL_TEST.md) in a separate test installation; it includes the one-time Google setup and a function checklist.
 
 SupportFlow can be deployed before any Google accounts, business knowledge or model keys are connected. The authenticated application opens **Company workspace → Business setup** with all business connectors. A separate [Personal test environment](PERSONAL_QUICKSTART.md) is available beside it without replacing the company profile or copying company credentials. Each company uses a separate deployment, PostgreSQL database, operator token and connector credentials. This release is not a public shared multi-tenant signup service.

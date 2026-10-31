@@ -124,6 +124,17 @@ class Workflow:
                 brand_query = brand_query.where(~Document.id.like("demo-%"))
             brands = list(session.scalars(brand_query)) or ["ABL", "Wallbox"]
             email.language, email.brand, email.risk_tags = classify(email, brands)
+            if self.config.automation_allowed_senders and parseaddr(email.sender)[1].casefold() not in self.config.automation_allowed_senders:
+                email.risk_tags = email.risk_tags + ["outside_automation_senders"]
+            if self.config.automation_enabled:
+                from app.automation import fresh_email
+                if not fresh_email(email.headers, self.config.automation_started_at):
+                    email.risk_tags = email.risk_tags + ["predates_automation_activation"]
+            if set(email.risk_tags) & {"outside_automation_senders", "predates_automation_activation"}:
+                email.status, email.disposition = "excluded", "excluded"
+                audit(session, "automation_scope_excluded", email.id)
+                session.commit()
+                return
             knowledge_state = session.get(State, "knowledge_sync")
             if knowledge_state and knowledge_state.value != "current":
                 email.risk_tags = email.risk_tags + ["knowledge_sync_uncertain"]
@@ -178,6 +189,10 @@ class Workflow:
                     email.response = (("Die freigegebene Dokumentation für Ihr Modell: "
                                        if email.language == "de" else
                                        "The approved documentation for your model: ") + "\n".join(urls))
+                if (self.config.automation_enabled and grounded and not proposal.uncertain and not email.risk_tags
+                        and proposal.category in {"manual_link", "setup_faq", "product_specs"}
+                        and email.model != "unknown"):
+                    email.disposition = "eligible"
             email.provider_version = self.model.version
             email.status = "ready"
             audit(session, "decision_created", email.id, disposition=email.disposition,
@@ -185,7 +200,7 @@ class Workflow:
                   source_revisions=[{"id": c["document_id"], "revision": c["revision"]} for c in email.citations])
             session.commit()
         self.create_draft(message_id)
-        if self.config.auto_send_enabled and self.config.production_approved:
+        if self.config.auto_send_enabled and self.config.production_approved and not self.config.automation_enabled:
             try:
                 self.deliver(message_id, automatic=True)
             except Conflict:
@@ -215,6 +230,8 @@ class Workflow:
                 raise
             email.draft_id, email.status = draft_id, "draft"
             audit(session, "draft_created", email.id)
+            if self.config.automation_enabled and email.disposition == "eligible":
+                enqueue(session, "auto_send:" + email.id, "auto_send", {"message_id": email.id})
             session.commit()
 
     @staticmethod
@@ -237,6 +254,14 @@ class Workflow:
         if self.config.review_only:
             raise Conflict("Business onboarding is draft-only; send through your human support process")
         with self.factory() as session:
+            if self.config.configured_business:
+                from app.business import active
+                from app.automation import policy, sender_allowed
+                if not active(session):
+                    raise Conflict("Processing has been paused")
+                current_policy = policy(session)
+                if self.config.automation_enabled and not current_policy["enabled"]:
+                    raise Conflict("Automatic replies have been disabled")
             # Serialize rate-limit, kill-switch and reservation checks across workers.
             controls = session.scalar(select(State).where(State.key == "kill_switch").with_for_update())
             email = session.scalar(select(Message).where(Message.id == message_id).with_for_update())
@@ -262,11 +287,19 @@ class Workflow:
                 raise Conflict("Recipient validation failed")
             if email.risk_tags or email.disposition == "escalate":
                 raise Conflict("Risk-tagged cases must be handled in the existing human support route")
+            if self.config.configured_business and self.config.automation_enabled and not sender_allowed(current_policy, email.sender):
+                raise Conflict("Sender is outside automatic reply scope")
+            if self.config.automation_enabled:
+                from app.automation import fresh_email
+                from app.db import BusinessConfig
+                activation = session.get(BusinessConfig, "activation")
+                if not fresh_email(email.headers, activation.value.get("since", "") if activation else ""):
+                    raise Conflict("Email predates current automation activation")
             if not self.sources_current(session, email):
                 raise Conflict("Current approved source evidence is required")
             if automatic:
                 if (not self.config.auto_send_enabled or not self.config.production_approved
-                        or email.disposition != "eligible" or email.category != "manual_link"
+                        or email.disposition != "eligible" or (email.category != "manual_link" and not self.config.automation_enabled)
                         or email.category not in self.config.auto_send_categories.split(",")):
                     raise Conflict("Automatic sending is not authorized")
             elif email.disposition != "approved":
@@ -296,6 +329,8 @@ class Workflow:
             record.state, record.outbound_id = "sent", outbound
             email.status = "sent"
             audit(session, "reply_sent", email.id, automatic=automatic)
+            from app.automation import queue_crm
+            queue_crm(session, email.id)
             session.commit()
 
     def approve(self, message_id, response, reason):
@@ -337,6 +372,8 @@ class Workflow:
             sent = self.mail.find_sent(self.rfc_id(message_id))
             if sent and record:
                 record.state, record.outbound_id, email.status = "sent", sent, "sent"
+                from app.automation import queue_crm
+                queue_crm(session, message_id)
             elif not record and email.status in {"draft_uncertain", "draft_creating"}:
                 draft = self.mail.find_draft(self.rfc_id(message_id))
                 if not draft:

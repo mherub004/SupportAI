@@ -13,12 +13,12 @@ from app.service import Workflow, enqueue, initialize
 log = logging.getLogger("supportflow.worker")
 
 
-def run_one(factory, workflow):
+def run_one(factory, workflow, crm_only=False):
     with factory() as session:
         job = session.scalar(select(Job).where(
             or_((Job.status == "pending") & (Job.available_at <= now()),
                 (Job.status == "working") & (Job.lease_until < now()))
-        ).order_by(Job.available_at).with_for_update(skip_locked=True).limit(1))
+        ).where(Job.kind == "crm_sync" if crm_only else True).order_by(Job.available_at).with_for_update(skip_locked=True).limit(1))
         if not job:
             return False
         job_id, kind, payload = job.id, job.kind, job.payload
@@ -35,6 +35,15 @@ def run_one(factory, workflow):
                 workflow.create_draft(payload["message_id"])
             else:
                 workflow.process(payload["message_id"])
+        elif kind == "auto_send":
+            from app.db import Send
+            with factory() as session:
+                reserved = session.get(Send, payload["message_id"])
+            if not reserved:
+                workflow.deliver(payload["message_id"], automatic=True)
+        elif kind == "crm_sync":
+            from app.automation import sync
+            sync(factory, workflow.config, payload["message_id"], payload["provider"])
         elif kind == "gmail_sync":
             workflow.sync_gmail()
         elif kind == "drive_sync":
@@ -57,6 +66,13 @@ def run_one(factory, workflow):
             job = session.get(Job, job_id)
             job.error = type(exc).__name__
             job.status = "failed" if job.attempts >= 5 else "pending"
+            if kind == "crm_sync":
+                from app.db import CrmDelivery
+                row = session.get(CrmDelivery, (payload["message_id"], payload["provider"]))
+                if row:
+                    uncertain = "reserved" in (row.activity_state, row.case_state)
+                    row.status = "needs_review" if uncertain else "failed" if job.attempts >= 5 else "retrying"
+                    row.error = "UncertainExternalWrite" if uncertain else type(exc).__name__
             job.available_at = now() + timedelta(seconds=min(300, 2 ** job.attempts))
             audit(session, "job_failed", job_id, error=job.error, attempts=job.attempts)
             session.commit()
@@ -95,6 +111,7 @@ def main():
     while True:
         effective = runtime(config, factory)
         if (effective.configured_business or effective.workspace == "personal_test") and not effective.business_active:
+            run_one(factory, Workflow(effective, factory), crm_only=True)
             if args.once:
                 break
             time.sleep(2)

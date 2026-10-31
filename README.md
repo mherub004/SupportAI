@@ -64,6 +64,10 @@ If Chromium is already installed, use `CHROMIUM_PATH=/usr/bin/chromium npm run t
 
 The Business setup screen supports company details, response tone, human escalation policies, approved knowledge entry, encrypted connector settings, read-only verification, and draft-only activation. Unconfigured providers stay inactive. Saving changes pauses processing. Existing demo data is retained separately from live provider identities. Supported integrations are listed explicitly; unsupported services cannot be connected yet.
 
+## Automatic support replies and CRM logging
+
+[Set up email automation](docs/AUTOMATION.md): authorize supported accounts, approve knowledge, choose your sender scope and reply policy, then activate. Confirmed sends can log a customer activity and update its support case in Salesforce and/or NetSuite. Personal Gmail tests stay separate from company data. Provider registration, write permissions and the NetSuite case field remain account-side prerequisites.
+
 ## What works
 
 - Authenticated operator review workspace: inbox, source excerpts/revisions, response editing/approval, thread takeover, mailbox kill switch, knowledge registry, job status, audit metadata.
@@ -75,7 +79,7 @@ The Business setup screen supports company details, response tone, human escalat
 - Gemini structured responses, provider interface, and bounded, scoped evidence context. The model receives customer message text only after you select Google mode; choose this route only after your organization's data-processing approval.
 - Frozen dependency locks, container health checks, CI, synthetic fixtures, retention command and recovery runbook.
 
-Only a deterministic **approved customer manual-link template** can become auto-send eligible. The broader setup/specification/clarification categories in the plan remain human-reviewed in this version. Free-form model prose is never automatically sent. Manual approval cannot override safety tags, paused threads, stale/ungrounded evidence or an uncertain operation. Handle those cases through your existing support process.
+The default remains draft review. Opt-in automation can also send grounded, certain setup FAQs and product specifications under an explicit saved reply policy. Clarifications, risk-tagged and uncertain cases remain for human handling. [Automation behavior and limits](docs/AUTOMATION.md) describe the eligible categories, current-source checks and CRM logging. Manual approval cannot override safety tags, paused threads, stale/ungrounded evidence or an uncertain operation. Handle those cases through your existing support process.
 
 ## Connect a nonproduction Google mailbox
 

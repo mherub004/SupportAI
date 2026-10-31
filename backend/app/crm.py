@@ -132,6 +132,55 @@ class Salesforce:
             "organization": (row.get("Account") or {}).get("Name", ""),
         })
 
+    def version(self):
+        if hasattr(self, "_root"):
+            return self._root
+        versions = [v["version"] for v in self.get("/services/data/") if re.fullmatch(r"\d+\.\d+", str(v.get("version", "")))]
+        self._root = "/services/data/v" + max(versions, key=float)
+        return self._root
+
+    def verify_writes(self):
+        root = self.version()
+        for kind in ("Task", "CaseComment"):
+            if not self.get(root + f"/sobjects/{kind}/describe").get("createable"):
+                raise ValueError("Integration user requires Task and CaseComment create permission")
+
+    def support_cases(self, customer, reference=None):
+        if not re.fullmatch(r"[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?", customer):
+            raise ValueError("Invalid Salesforce contact ID")
+        if reference is not None and not re.fullmatch(r"\d{1,20}", reference):
+            raise ValueError("Invalid case number")
+        clause = f"CaseNumber = '{reference}'" if reference else "IsClosed = false"
+        query = f"SELECT Id FROM Case WHERE ContactId = '{customer}' AND {clause} LIMIT 2"
+        return [r["Id"] for r in self.get(self.version() + "/query", params={"q": query}).get("records", [])]
+
+    def validate_case(self, case, customer):
+        if not re.fullmatch(r"[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?", case):
+            raise ValueError("Invalid Salesforce case ID")
+        if self.get(self.version() + "/sobjects/Case/" + case).get("ContactId") != customer:
+            raise ValueError("Case does not belong to the matched contact")
+
+    def log_activity(self, customer, case, marker, body):
+        result = httpx.post(self.origin + self.version() + "/sobjects/Task", headers=self.headers, json={
+            "WhoId": customer, "WhatId": case, "Subject": "SupportFlow reply " + marker,
+            "Description": body[:32000], "Status": "Completed"}, timeout=20)
+        result.raise_for_status()
+        return result.json()["id"]
+
+    def log_case(self, case, marker, body):
+        result = httpx.post(self.origin + self.version() + "/sobjects/CaseComment", headers=self.headers,
+                            json={"ParentId": case, "CommentBody": body[:4000], "IsPublished": False}, timeout=20)
+        result.raise_for_status()
+
+    def confirm_write(self, stage, customer, case, marker, external_id):
+        if not re.fullmatch(r"[A-Za-z0-9]{15}(?:[A-Za-z0-9]{3})?", external_id):
+            return False
+        kind = "Task" if stage == "activity" else "CaseComment"
+        value = self.get(self.version() + f"/sobjects/{kind}/" + external_id)
+        if stage == "activity":
+            return value.get("WhoId") == customer and value.get("WhatId") == case and marker in value.get("Description", "")
+        return value.get("ParentId") == case and marker in value.get("CommentBody", "")
+
 
 class NetSuite:
     def __init__(self, fields):
@@ -157,3 +206,52 @@ class NetSuite:
         return one_match(rows, lambda row: {"record_id": str(row["id"]),
                                             "display_name": row.get("entityid", ""),
                                             "organization": row.get("companyname", "")})
+
+    def record(self, method, path, **kwargs):
+        result = httpx.request(method, self.origin + "/services/rest/record/v1/" + path,
+                               headers={**kwargs.pop("headers", {}), "Authorization": self.headers["Authorization"]}, timeout=20, **kwargs)
+        result.raise_for_status()
+        return result
+
+    def verify_writes(self):
+        field = self.fields.get("netsuite_case_reply_field", "")
+        if not re.fullmatch(r"custevent_[a-z0-9_]+", field):
+            raise ValueError("Configure a dedicated NetSuite case reply custom text field")
+        task = self.record("GET", "metadata-catalog/task", headers={"Accept": "application/schema+json"}).json().get("properties", {})
+        case = self.record("GET", "metadata-catalog/supportCase", headers={"Accept": "application/schema+json"}).json().get("properties", {})
+        if any(name not in task or task[name].get("readOnly") for name in ("title", "company", "message")):
+            raise ValueError("NetSuite Task schema/role does not support activity logging")
+        if field not in case or case[field].get("readOnly") or case[field].get("type") != "string":
+            raise ValueError("NetSuite case reply field is absent or read-only")
+
+    def support_cases(self, customer, reference=None):
+        if not str(customer).isdigit():
+            raise ValueError("Invalid NetSuite customer ID")
+        if reference is not None and not re.fullmatch(r"\d{1,20}", reference):
+            raise ValueError("Invalid case number")
+        clause = " AND casenumber = '" + reference + "'" if reference else ""
+        return [str(r["id"]) for r in self.query("SELECT id FROM supportcase WHERE company = " + str(customer) + clause)]
+
+    def validate_case(self, case, customer):
+        if not str(case).isdigit():
+            raise ValueError("Invalid NetSuite support case ID")
+        record = self.record("GET", "supportCase/" + str(case)).json()
+        if str((record.get("company") or {}).get("id")) != str(customer):
+            raise ValueError("Case does not belong to matched customer")
+
+    def log_activity(self, customer, case, marker, body):
+        result = self.record("POST", "task", json={"title": "SupportFlow reply " + marker,
+                             "company": {"id": str(customer)}, "message": body[:32000]})
+        return result.headers.get("Location", "").rsplit("/", 1)[-1] or marker
+
+    def log_case(self, case, marker, body):
+        self.record("PATCH", "supportCase/" + str(case), json={self.fields["netsuite_case_reply_field"]: body[:10000]})
+
+    def confirm_write(self, stage, customer, case, marker, external_id):
+        if stage == "activity":
+            if not external_id.isdigit():
+                return False
+            value = self.record("GET", "task/" + external_id).json()
+            return str((value.get("company") or {}).get("id")) == customer and marker in value.get("message", "")
+        value = self.record("GET", "supportCase/" + case).json()
+        return str((value.get("company") or {}).get("id")) == customer and marker in value.get(self.fields["netsuite_case_reply_field"], "")

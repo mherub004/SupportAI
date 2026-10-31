@@ -75,12 +75,17 @@ def start(session, provider, binding, base, personal=False):
     record = session.get(Connector, provider)
     existing_fields = decode(record, base) if record and record.enabled else {}
     prefix = "google" if provider == "google" else provider
-    if (personal or provider != "google") and not (existing_fields.get(prefix + "_client_id") and existing_fields.get(prefix + "_client_secret")):
+    if not (existing_fields.get(prefix + "_client_id") and existing_fields.get(prefix + "_client_secret")):
         hosted = hosted_fields(provider, base)
         if not hosted:
             raise ValueError("The host must configure its provider OAuth application first")
         if provider == "netsuite" and existing_fields.get("netsuite_account_id"):
             hosted["netsuite_account_id"] = existing_fields["netsuite_account_id"]
+        if provider == "google" and not personal and not existing_fields.get("mailbox"):
+            business = profile(session)
+            if not business:
+                raise ValueError("Save the company support mailbox first")
+            hosted["mailbox"] = business["support_email"]
         save_connector(session, provider, hosted, base)
         session.flush()
         record = session.get(Connector, provider)

@@ -163,6 +163,9 @@ class Gmail(GoogleClient):
             return None
         payload = data.get("payload", {})
         headers = {h["name"].lower(): h["value"] for h in payload.get("headers", [])}
+        headers.pop("x-supportflow-internal-date", None)
+        if str(data.get("internalDate", "")).isdigit():
+            headers["x-supportflow-internal-date"] = str(data["internalDate"])
         bodies = []
 
         def walk(part):

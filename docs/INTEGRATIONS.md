@@ -1,5 +1,7 @@
 # Connect business email, knowledge, Salesforce and NetSuite
 
+For the automatic email → customer activity → support case workflow, follow [AUTOMATION.md](AUTOMATION.md). Draft review remains the default; the older draft-only/read-only descriptions below describe that default mode.
+
 For a first personal-account trial, start with [the two-account test guide](PERSONAL_TEST.md): Google OAuth registration, sample knowledge, real email delivery checks and a supported-function checklist.
 
 The application keeps these roles separate:

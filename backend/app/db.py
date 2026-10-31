@@ -98,6 +98,20 @@ class State(Base):
     value: Mapped[str] = mapped_column(Text)
 
 
+class CrmDelivery(Base):
+    __tablename__ = "crm_deliveries"
+    message_id: Mapped[str] = mapped_column(ForeignKey("messages.id"), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(20), primary_key=True)
+    status: Mapped[str] = mapped_column(String(40), default="pending")
+    customer_id: Mapped[str] = mapped_column(String(100), default="")
+    case_id: Mapped[str] = mapped_column(String(100), default="")
+    activity_id: Mapped[str] = mapped_column(String(255), default="")
+    target_origin: Mapped[str] = mapped_column(String(500), default="")
+    activity_state: Mapped[str] = mapped_column(String(30), default="pending")
+    case_state: Mapped[str] = mapped_column(String(30), default="pending")
+    error: Mapped[str] = mapped_column(String(100), default="")
+
+
 def database(url, workspace="company"):
     engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
     if workspace == "personal_test" and engine.dialect.name == "postgresql":

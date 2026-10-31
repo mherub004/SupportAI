@@ -1,5 +1,11 @@
 # Delivery status against the proposal
 
+## Current support automation extension
+
+The application now includes opt-in automatic support-email replies and a separate confirmed-delivery CRM outbox. Standard Salesforce customer Tasks/private CaseComments and NetSuite customer Tasks/dedicated case text updates are implemented, with missing-match review, per-stage states, bounded retries and external-write reconciliation. The company workspace and personal test area remain separate. [Setup and supported mappings](AUTOMATION.md) describe the actual behavior and account requirements.
+
+This does not supply a hosted/verified Google OAuth registration, real user grants, provider accounts/licenses, custom CRM schema mappings or a production correctness certification. Existing draft-only/read-only descriptions below document the original baseline; the new opt-in behavior is governed by AUTOMATION.md and the latest validation section.
+
 The original plan is preserved verbatim in [PROJECT_PLAN.md](PROJECT_PLAN.md). Its approval requests are project requirements, not evidence that stakeholders granted approvals. This initial repository delivers a runnable software pilot and the technical basis for later phases; it does not claim the entire organizational rollout has happened.
 
 | Plan area | Implemented in this version | Remaining acceptance work |

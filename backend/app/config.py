@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     connector_mode: Literal["demo", "google"] = "demo"
     mailbox: str = "support@example.invalid"
     auto_send_enabled: bool = False
+    automation_enabled: bool = False
+    automation_allowed_senders: list[str] = []
+    automation_started_at: str = ""
     production_approved: bool = False
     auto_send_categories: str = "manual_link,clarification"
     hourly_send_limit: int = 10

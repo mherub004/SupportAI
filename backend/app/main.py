@@ -251,10 +251,12 @@ def create_app(config=None, db=None, workflow=None):
     from app.drive_setup import install_routes as install_drive
     from app.crm_routes import install_routes as install_crm
     from app.personal import install_routes as install_personal
+    from app.automation import install_routes as install_automation
     install_oauth(app, config, factory, operator)
     install_drive(app, config, factory, operator)
     install_crm(app, config, factory, operator)
     install_personal(app, config, factory, operator)
+    install_automation(app, config, factory, operator)
     return app
 
 

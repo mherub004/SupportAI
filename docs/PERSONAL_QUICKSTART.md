@@ -1,5 +1,7 @@
 # Personal setup: Google, knowledge and a Gemini key
 
+For the automatic email → customer activity → support case workflow, follow [AUTOMATION.md](AUTOMATION.md). Draft review remains the default; the older draft-only/read-only descriptions below describe that default mode.
+
 The default **Company workspace** keeps all company forms, policies and connectors. Click **Personal test environment** beside it, then **Personal setup**, for your separate Gmail trial. Switching environments never replaces the company profile.
 
 1. Click **Connect Google**, choose one Gmail account and grant access. The application discovers the actual primary mailbox from Google's API and creates a paused personal profile automatically. No mailbox address, OAuth token or company details need to be entered by the account user.
